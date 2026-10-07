@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String            @id @default(uuid())
+  name               String
+  email              String            @unique
+  passwordHash       String            @map("password_hash")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+  uploadedDocuments  Document[]        @relation("DocumentUploadedBy")
+  uploadedTimesheets TimesheetUpload[] @relation("TimesheetUploadedBy")
+
+  @@map("users")
+}
+
+model Company {
+  id               String            @id @default(uuid())
+  code             String            @unique
+  name             String            @unique
+  createdAt        DateTime          @default(now()) @map("created_at")
+  timesheetUploads TimesheetUpload[]
+  workers          Worker[]
+
+  @@map("companies")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  code        String       @unique
+  name        String
+  workRecords WorkRecord[]
+
+  @@map("roles")
+}
+
+model Worker {
+  id               String             @id @default(uuid())
+  workerCode       String             @unique @map("worker_code")
+  companyId        String             @map("company_id")
+  name             String
+  passportNumber   String?            @map("passport_number")
+  passportExpiry   DateTime?          @map("passport_expiry") @db.Date
+  nationality      String?
+  dateOfBirth      DateTime?          @map("date_of_birth") @db.Date
+  phone            String?
+  visaNumber       String?            @map("visa_number")
+  visaExpiry       DateTime?          @map("visa_expiry") @db.Date
+  emiratesIdNumber String?            @map("emirates_id_number")
+  emiratesIdExpiry DateTime?          @map("emirates_id_expiry") @db.Date
+  labourCardNumber String?            @map("labour_card_number")
+  jobTitle         String?            @map("job_title")
+  joiningDate      DateTime?          @map("joining_date") @db.Date
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  documents        Document[]
+  workRecords      WorkRecord[]
+  assignments      WorkerAssignment[]
+  company          Company            @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([name])
+  @@map("workers")
+}
+
+model Client {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  workRecords WorkRecord[]
+  assignments WorkerAssignment[]
+
+  @@map("clients")
+}
+
+model WorkerAssignment {
+  id        String    @id @default(uuid())
+  workerId  String    @map("worker_id")
+  clientId  String    @map("client_id")
+  startDate DateTime  @map("start_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at")
+  client    Client    @relation(fields: [clientId], references: [id])
+  worker    Worker    @relation(fields: [workerId], references: [id])
+
+  @@index([workerId])
+  @@index([clientId])
+  @@map("worker_assignments")
+}
+
+model Document {
+  id               String       @id @default(uuid())
+  workerId         String       @map("worker_id")
+  type             DocumentType
+  storageKey       String       @map("storage_key")
+  originalFilename String       @map("original_filename")
+  mimeType         String       @map("mime_type")
+  fileSize         Int          @map("file_size")
+  uploadedAt       DateTime     @default(now()) @map("uploaded_at")
+  uploadedById     String       @map("uploaded_by")
+  uploadedBy       User         @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  worker           Worker       @relation(fields: [workerId], references: [id])
+
+  @@unique([workerId, type])
+  @@map("documents")
+}
+
+model TimesheetUpload {
+  id               String          @id @default(uuid())
+  companyId        String          @map("company_id")
+  periodMonth      DateTime        @map("period_month") @db.Date
+  originalFilename String          @map("original_filename")
+  storageKey       String          @map("storage_key")
+  uploadedById     String          @map("uploaded_by")
+  uploadedAt       DateTime        @default(now()) @map("uploaded_at")
+  status           TimesheetStatus @default(PROCESSING)
+  rowCount         Int             @default(0) @map("row_count")
+  errorCount       Int             @default(0) @map("error_count")
+  company          Company         @relation(fields: [companyId], references: [id])
+  uploadedBy       User            @relation("TimesheetUploadedBy", fields: [uploadedById], references: [id])
+  workRecords      WorkRecord[]
+
+  @@index([companyId, periodMonth])
+  @@map("timesheet_uploads")
+}
+
+enum WorkRecordSource {
+  TIMESHEET
+  MANUAL
+}
+
+model WorkRecord {
+  id         String           @id @default(uuid())
+  workerId   String           @map("worker_id")
+  clientId   String           @map("client_id")
+  roleId     String           @map("role_id")
+  workDate   DateTime         @map("work_date") @db.Date
+  hours      Decimal?         @db.Decimal(4, 2)
+  status     WorkStatus
+  source     WorkRecordSource @default(TIMESHEET)
+  uploadId   String?          @map("upload_id")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+  upload TimesheetUpload? @relation(fields: [uploadId], references: [id])
+  worker Worker @relation(fields: [workerId], references: [id])
+
+  @@unique([workerId, workDate])
+  @@index([uploadId])
+  @@map("work_records")
+}
+
+enum DocumentType {
+  PHOTO
+  PASSPORT
+  VISA
+  EMIRATES_ID
+  LABOUR_CARD
+}
+
+enum TimesheetStatus {
+  PROCESSING
+  ACTIVE
+  SUPERSEDED
+  FAILED
+}
+
+enum WorkStatus {
+  WORKED
+  ABSENT
+  HOLIDAY
+  WEEKLY_OFF
+}
