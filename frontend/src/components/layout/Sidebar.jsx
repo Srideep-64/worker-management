@@ -53,7 +53,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-4 text-xs text-white/40">
-        3 companies &middot; ~150 workers
+        Made by &middot; Srideep Reddy
       </div>
     </aside>
   );

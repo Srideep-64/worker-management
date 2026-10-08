@@ -36,8 +36,7 @@ export default function Settings() {
         }
       >
         <p className="mb-4 text-sm text-text-muted">
-          Every user currently has full admin access. Role-based permissions aren&rsquo;t needed yet with
-          this small a team, but the data model leaves room for it later.
+          Every user currently has full admin access. 
         </p>
         <table className="w-full text-left text-sm">
           <thead>
