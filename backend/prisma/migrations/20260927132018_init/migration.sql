@@ -169,7 +169,7 @@ CREATE INDEX "worker_assignments_client_id_idx" ON "worker_assignments"("client_
 CREATE UNIQUE INDEX "documents_worker_id_type_key" ON "documents"("worker_id", "type");
 
 -- CreateIndex
-CREATE INDEX "timesheet_uploads_company_id_period_month_idx" ON "timesheet_uploads"("company_id", "period_month") where "status" = "ACTIVE";
+CREATE INDEX "timesheet_uploads_company_id_period_month_idx" ON "timesheet_uploads"("company_id", "period_month") where "status" = 'ACTIVE';
 
 -- CreateIndex
 CREATE INDEX "work_records_upload_id_idx" ON "work_records"("upload_id");
