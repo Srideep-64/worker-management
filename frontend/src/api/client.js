@@ -12,7 +12,7 @@
  * - API paths remain relative across environments.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const BASE_URL = "/api";
 
 // Custom API error
 export class ApiError extends Error {
