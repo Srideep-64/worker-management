@@ -170,6 +170,8 @@ function MonthlyStats({ companyId }) {
     ["Weekly offs", summary?.weeklyOffs],
   ];
 
+  const hasRecords = (data?.workersWithRecords ?? 0) > 0;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -205,14 +207,14 @@ function MonthlyStats({ companyId }) {
         </p>
       )}
 
-      {!loading && !error && data && !data.activeUpload && (
+      {!loading && !error && data && !hasRecords && (
         <EmptyState
-          title="No active timesheet for this month"
-          description="Upload and confirm a timesheet on the Timesheets page to see statistics."
+          title="No records for this month"
+          description="There are no manual or timesheet work records for this month."
         />
       )}
 
-      {!loading && !error && data?.activeUpload && summary && (
+      {!loading && !error && data && hasRecords && summary && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {statCards.map(([label, value]) => (
@@ -264,9 +266,15 @@ function MonthlyStats({ companyId }) {
             ))}
           </div>
 
-          {data.activeUpload.originalFilename && (
+          {data.activeUpload ? (
+            data.activeUpload.originalFilename && (
+              <p className="text-xs text-text-muted">
+                Source: {data.activeUpload.originalFilename}
+              </p>
+            )
+          ) : (
             <p className="text-xs text-text-muted">
-              Source: {data.activeUpload.originalFilename}
+              Source: Manual work records
             </p>
           )}
         </>
@@ -274,6 +282,7 @@ function MonthlyStats({ companyId }) {
     </div>
   );
 }
+
 
 export default function CompanyDetail() {
   const { companyId } = useParams();
