@@ -17,7 +17,7 @@ function cookieOptions() {
   return {
     httpOnly: true,
     secure: isProduction, // must be true in production (HTTPS); relaxed in local dev
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: "lax",
     maxAge: COOKIE_MAX_AGE_MS,
     path: "/",
   };
