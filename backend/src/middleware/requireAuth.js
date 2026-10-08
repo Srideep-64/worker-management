@@ -12,12 +12,6 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const requireAuth = asyncHandler(async (req, res, next) => {
   const token = req.cookies?.[env.COOKIE_NAME];
 
-    console.log("AUTH DEBUG:", {
-    hasCookie: Boolean(token),
-    cookieName: env.COOKIE_NAME,
-    origin: req.headers.origin,
-    referer: req.headers.referer,
-  });
 
   if (!token) {
     throw ApiError.unauthorized();
