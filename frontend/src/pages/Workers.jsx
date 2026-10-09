@@ -93,10 +93,10 @@ function AddWorkerModal({ companies, onClose, onSaved }) {
               onChange={(event) =>
                 updateField("workerCode", event.target.value.toUpperCase())
               }
-              placeholder="OS42200"
-              pattern="OS[0-9]{5}"
-              title="Use a code like OS42200"
-              maxLength={7}
+              placeholder="AB12345"
+              pattern="[A-Z]{2,4}[0-9]{5,6}"
+              title="Use 2–4 uppercase letters followed by 5–6 digits"
+              maxLength={10}
               required
             />
           </div>
