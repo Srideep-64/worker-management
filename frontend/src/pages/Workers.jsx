@@ -94,7 +94,7 @@ function AddWorkerModal({ companies, onClose, onSaved }) {
                 updateField("workerCode", event.target.value.toUpperCase())
               }
               placeholder="AB12345"
-              pattern="[A-Z]{2,4}[0-9]{5,6}"
+              pattern="[A-Z]{2,4}[0-9]{3,6}"
               title="Use 2–4 uppercase letters followed by 5–6 digits"
               maxLength={10}
               required

@@ -9,7 +9,7 @@ export const createWorkerSchema = z.object({
   workerCode: z
   .string()
   .trim()
-  .regex( /^[A-Z]{2,4}\d{5,6}$/, "worker_code must contain 2–4 uppercase letters followed by 5–6 digits" ),
+  .regex( /^[A-Z]{2,4}\d{3,6}$/, "worker_code must contain 2–4 uppercase letters followed by 5–6 digits" ),
   companyId: z.string().uuid(),
   name: z.string().trim().min(1).max(200),
   passportNumber: z.string().trim().max(50).optional(),
