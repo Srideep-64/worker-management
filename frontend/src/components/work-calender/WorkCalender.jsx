@@ -42,6 +42,7 @@ export default function WorkCalendar({ workerId }) {
   const [pendingEdit, setPendingEdit] = useState(null);
 
   const entryInputRef = useRef(null);
+  const shouldFocusEntryRef = useRef(false);
 
   const month = monthKey(ym.y, ym.m);
 
@@ -94,18 +95,24 @@ export default function WorkCalendar({ workerId }) {
     selectedRecord?.role?.id,
   ]);
 
-  // Focus the entry field when navigating between dates.
-  useEffect(() => {
-    if (!selectedRoleId && !isEditingManual) return;
-    if (pendingEdit) return;
 
-    const frame = requestAnimationFrame(() => {
-      entryInputRef.current?.focus();
-    });
+// Focus the entry field when navigating between dates.
+    useEffect(() => {
+      if (pendingEdit) return;
 
-    return () => cancelAnimationFrame(frame);
-  }, [selected, selectedRoleId, isEditingManual, pendingEdit]);
+      const frame = requestAnimationFrame(() => {
+        if (
+          shouldFocusEntryRef.current ||
+          document.activeElement !== entryInputRef.current
+        ) {
+          entryInputRef.current?.focus();
+          shouldFocusEntryRef.current = false;
+        }
+      });
 
+      return () => cancelAnimationFrame(frame);
+    }, [selected, selectedRoleId, isEditingManual, pendingEdit, saving]);
+    
   function clearPendingEntry() {
     setEntryValue("");
     setSaveError("");
@@ -321,29 +328,31 @@ export default function WorkCalendar({ workerId }) {
     setSaving(true);
     setSaveError("");
 
-    try {
-      await api.post(`/workers/${workerId}/work`, {
-        workDate: selected,
-        roleId: selectedRoleId,
-        status: next.status,
-        ...(next.status === "WORKED"
-          ? { hours: next.hours }
-          : {}),
-      });
+      try {
+        await api.post(`/workers/${workerId}/work`, {
+          workDate: selected,
+          roleId: selectedRoleId,
+          status: next.status,
+          ...(next.status === "WORKED"
+            ? { hours: next.hours }
+            : {}),
+        });
 
-      setEntryValue("");
-      await reload();
-    } catch (err) {
-      setSaveError(
-        err?.message || "Could not save this work record.",
-      );
-    } finally {
-      setSaving(false);
+        setEntryValue("");
+        setSaveError("");
+        
+        shouldFocusEntryRef.current = true;
+        // Move to the next date after a successful save.
+        navigateDate(1);
 
-      requestAnimationFrame(() => {
-        entryInputRef.current?.focus();
-      });
-    }
+        await reload();
+      } catch (err) {
+        setSaveError(
+          err?.message || "Could not save this work record.",
+        );
+      } finally {
+        setSaving(false);
+      }
   }
 
   async function confirmEdit() {
@@ -360,6 +369,10 @@ export default function WorkCalendar({ workerId }) {
 
       setPendingEdit(null);
       setEntryValue("");
+      setSaveError("");
+      
+      shouldFocusEntryRef.current = true;
+      navigateDate(1);
 
       await reload();
     } catch (err) {
@@ -369,9 +382,6 @@ export default function WorkCalendar({ workerId }) {
     } finally {
       setSaving(false);
 
-      requestAnimationFrame(() => {
-        entryInputRef.current?.focus();
-      });
     }
   }
 
