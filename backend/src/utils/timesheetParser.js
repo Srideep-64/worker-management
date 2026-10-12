@@ -93,17 +93,17 @@ function parseDayCellValue(raw) {
   return { kind: "error", message: `"${raw}" is not recognized — expected a number of hours (0–24), or A/H/W` };
 }
 
-function parseFormatWide(sheet, overrideSheet, { periodDate, workersByCode, clientsByCode, rolesByCode }) {
+function parseFormatWide(sheet, overrideSheet, { periodDate, workersByCode,  rolesByCode }) {
   const { headerRow, dataRows } = sheetToRows(sheet);
   const idxWorkerId = colIndex(headerRow, "WORKER_ID");
   const idxRole = colIndex(headerRow, "ROLE");
-  const idxClientId = colIndex(headerRow, "CLIENT_ID");
+  
   const dayColumns = headerRow
     .map((h, i) => ({ day: Number(h), i }))
     .filter(({ i }) => /^\d+$/.test(headerRow[i]))
     .sort((a, b) => a.day - b.day);
 
-  if (idxWorkerId === -1 || idxRole === -1 || idxClientId === -1) {
+  if (idxWorkerId === -1 || idxRole === -1 ) {
     return {
       format: "WIDE",
       errors: [
@@ -111,7 +111,7 @@ function parseFormatWide(sheet, overrideSheet, { periodDate, workersByCode, clie
           sheet: "Sheet1",
           row: 1,
           field: null,
-          message: "Missing one of the required columns: WORKER_ID, ROLE, CLIENT_ID",
+          message: "Missing one of the required columns: WORKER_ID, ROLE",
         },
       ],
       records: [],
@@ -157,7 +157,7 @@ if (missingDays.length > 0) {
 
     const workerCode = row[idxWorkerId] !== undefined ? String(row[idxWorkerId]).trim() : "";
     const baseRoleCode = row[idxRole] !== undefined ? String(row[idxRole]).trim() : "";
-    const clientCode = row[idxClientId] !== undefined ? String(row[idxClientId]).trim() : "";
+   
 
     if (!workerCode) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: "Missing worker ID" });
@@ -172,16 +172,6 @@ if (missingDays.length > 0) {
     const worker = workersByCode[workerCode];
     if (!worker) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: `Unknown worker ID "${workerCode}" for this company` });
-      return;
-    }
-
-    if (!clientCode) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "CLIENT_ID", message: "Missing client ID" });
-      return;
-    }
-    const client = clientsByCode[clientCode];
-    if (!client) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "CLIENT_ID", message: `Unknown client ID "${clientCode}"` });
       return;
     }
 
@@ -220,7 +210,6 @@ if (missingDays.length > 0) {
 
       records.push({
         workerId: worker.id,
-        clientId: client.id,
         roleId: rolesByCode[roleCode].id,
         workDate,
         hours: parsed.kind === "hours" ? parsed.value : null,
@@ -279,11 +268,10 @@ function parseRoleOverrideSheet(overrideSheet, rolesByCode, errors) {
   return overrides;
 }
 
-function parseFormatDaily(sheet, { periodDate, workersByCode, clientsByCode, rolesByCode }) {
+function parseFormatDaily(sheet, { periodDate, workersByCode, rolesByCode }) {
   const { headerRow, dataRows } = sheetToRows(sheet);
   const idx = {
     WORKER_ID: colIndex(headerRow, "WORKER_ID"),
-    CLIENT_ID: colIndex(headerRow, "CLIENT_ID"),
     DATE: colIndex(headerRow, "DATE"),
     ROLE: colIndex(headerRow, "ROLE"),
     HOURS: colIndex(headerRow, "HOURS"),
@@ -310,7 +298,6 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, clientsByCode, rol
     const rowNum = i + 2;
 
     const workerCode = row[idx.WORKER_ID] !== undefined ? String(row[idx.WORKER_ID]).trim() : "";
-    const clientCode = row[idx.CLIENT_ID] !== undefined ? String(row[idx.CLIENT_ID]).trim() : "";
     const roleCode = row[idx.ROLE] !== undefined ? String(row[idx.ROLE]).trim() : "";
     const dateRaw = row[idx.DATE];
     const hoursRaw = row[idx.HOURS];
@@ -323,16 +310,6 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, clientsByCode, rol
     const worker = workersByCode[workerCode];
     if (!worker) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: `Unknown worker ID "${workerCode}" for this company` });
-      return;
-    }
-
-    if (!clientCode) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "CLIENT_ID", message: "Missing client ID" });
-      return;
-    }
-    const client = clientsByCode[clientCode];
-    if (!client) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "CLIENT_ID", message: `Unknown client ID "${clientCode}"` });
       return;
     }
 
@@ -407,7 +384,6 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, clientsByCode, rol
 
     records.push({
       workerId: worker.id,
-      clientId: client.id,
       roleId: rolesByCode[roleCode].id,
       workDate,
       hours,

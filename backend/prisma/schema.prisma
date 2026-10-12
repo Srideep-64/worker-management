@@ -41,63 +41,31 @@ model Role {
 }
 
 model Worker {
-  id               String             @id @default(uuid())
-  workerCode       String             @unique @map("worker_code")
-  companyId        String             @map("company_id")
-  name             String
-  passportNumber   String?            @map("passport_number")
-  passportExpiry   DateTime?          @map("passport_expiry") @db.Date
-  nationality      String?
-  dateOfBirth      DateTime?          @map("date_of_birth") @db.Date
-  phone            String?
-  visaNumber       String?            @map("visa_number")
-  visaExpiry       DateTime?          @map("visa_expiry") @db.Date
-  emiratesIdNumber String?            @map("emirates_id_number")
-  emiratesIdExpiry DateTime?          @map("emirates_id_expiry") @db.Date
-  labourCardNumber String?            @map("labour_card_number")
-  jobTitle         String?            @map("job_title")
-  joiningDate      DateTime?          @map("joining_date") @db.Date
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
-  documents        Document[]
-  workRecords      WorkRecord[]
-  assignments      WorkerAssignment[]
-  company          Company            @relation(fields: [companyId], references: [id])
+  id                 String               @id @default(uuid())
+  workerCode         String               @unique @map("worker_code")
+  companyId          String               @map("company_id")
+  name               String
+  passportNumber     String?              @map("passport_number")
+  passportExpiry     DateTime?            @map("passport_expiry") @db.Date
+  nationality        String?
+  dateOfBirth        DateTime?            @map("date_of_birth") @db.Date
+  phone              String?
+  visaNumber         String?              @map("visa_number")
+  visaExpiry         DateTime?            @map("visa_expiry") @db.Date
+  emiratesIdNumber   String?              @map("emirates_id_number")
+  emiratesIdExpiry   DateTime?            @map("emirates_id_expiry") @db.Date
+  labourCardNumber   String?              @map("labour_card_number")
+  jobTitle           String?              @map("job_title")
+  joiningDate        DateTime?            @map("joining_date") @db.Date
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  documents          Document[]
+  workRecords        WorkRecord[]
+  company            Company              @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@index([name])
   @@map("workers")
-}
-
-model Client {
-  id          String             @id @default(uuid())
-  code        String             @unique
-  name        String
-  phone       String?
-  email       String?
-  address     String?
-  active      Boolean            @default(true)
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  workRecords WorkRecord[]
-  assignments WorkerAssignment[]
-
-  @@map("clients")
-}
-
-model WorkerAssignment {
-  id        String    @id @default(uuid())
-  workerId  String    @map("worker_id")
-  clientId  String    @map("client_id")
-  startDate DateTime  @map("start_date") @db.Date
-  endDate   DateTime? @map("end_date") @db.Date
-  createdAt DateTime  @default(now()) @map("created_at")
-  client    Client    @relation(fields: [clientId], references: [id])
-  worker    Worker    @relation(fields: [workerId], references: [id])
-
-  @@index([workerId])
-  @@index([clientId])
-  @@map("worker_assignments")
 }
 
 model Document {
@@ -136,31 +104,32 @@ model TimesheetUpload {
   @@map("timesheet_uploads")
 }
 
-enum WorkRecordSource {
-  TIMESHEET
-  MANUAL
-}
 
 model WorkRecord {
-  id         String           @id @default(uuid())
-  workerId   String           @map("worker_id")
-  clientId   String           @map("client_id")
-  roleId     String           @map("role_id")
-  workDate   DateTime         @map("work_date") @db.Date
-  hours      Decimal?         @db.Decimal(4, 2)
-  status     WorkStatus
-  source     WorkRecordSource @default(TIMESHEET)
-  uploadId   String?          @map("upload_id")
-  createdAt  DateTime         @default(now()) @map("created_at")
+  id        String           @id @default(uuid())
+  workerId  String           @map("worker_id")
+  roleId    String           @map("role_id")
+  workDate  DateTime         @map("work_date") @db.Date
+  hours     Decimal?         @db.Decimal(4, 2)
+  status    WorkStatus
+  uploadId  String?          @map("upload_id")
+  createdAt DateTime         @default(now()) @map("created_at")
+  source    WorkRecordSource @default(TIMESHEET)
 
-  client Client @relation(fields: [clientId], references: [id])
-  role   Role   @relation(fields: [roleId], references: [id])
+  role   Role             @relation(fields: [roleId], references: [id])
   upload TimesheetUpload? @relation(fields: [uploadId], references: [id])
-  worker Worker @relation(fields: [workerId], references: [id])
+  worker Worker           @relation(fields: [workerId], references: [id])
 
   @@unique([workerId, workDate])
   @@index([uploadId])
   @@map("work_records")
+}
+
+
+
+enum WorkRecordSource {
+  TIMESHEET
+  MANUAL
 }
 
 enum DocumentType {

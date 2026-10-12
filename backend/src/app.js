@@ -10,7 +10,6 @@ import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 export const app = express();
 
 // Behind a reverse proxy (nginx, a load balancer) in production, needed for
-// `secure` cookies and rate-limiting to see the real client IP/protocol.
 app.set("trust proxy", 1);
 
 app.use(helmet());

@@ -233,7 +233,6 @@ function AddWorkerModal({ companies, onClose, onSaved }) {
 export default function Workers() {
   const [search, setSearch] = useState("");
   const [companyId, setCompanyId] = useState("");
-  const [clientId, setClientId] = useState("");
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
 
@@ -245,14 +244,10 @@ export default function Workers() {
     loading: lookupsLoading,
     reload: reloadLookups,
   } = useFetch(async () => {
-    const [companyData, clientData] = await Promise.all([
-      api.get("/companies"),
-      api.get("/clients?active=true"),
-    ]);
+    const companyData = await api.get("/companies");
 
     return {
       companies: companyData.companies ?? [],
-      clients: clientData.clients ?? [],
     };
   }, []);
 
@@ -267,17 +262,15 @@ export default function Workers() {
         `/workers${qs({
           search: debouncedSearch.trim() || undefined,
           companyId: companyId || undefined,
-          clientId: clientId || undefined,
           page,
           pageSize: PAGE_SIZE,
         })}`,
       ),
-    [debouncedSearch, companyId, clientId, page],
+    [debouncedSearch, companyId, page],
   );
 
   const workers = data?.workers ?? [];
   const companies = lookups?.companies ?? [];
-  const clients = lookups?.clients ?? [];
   const pagination = data?.pagination;
 
   function resetPageAnd(setter) {
@@ -320,7 +313,7 @@ export default function Workers() {
         <div className="mb-4 space-y-2">
           {lookupError && (
             <p role="alert" className="text-sm text-danger">
-              Could not load company/client filters: {lookupError}
+              Could not load company filters: {lookupError}
               <button
                 type="button"
                 className="ml-2 underline"
@@ -372,20 +365,6 @@ export default function Workers() {
             </option>
           ))}
         </select>
-
-        <select
-          className="input w-auto"
-          aria-label="Filter by client"
-          value={clientId}
-          onChange={resetPageAnd(setClientId)}
-        >
-          <option value="">All clients</option>
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       {loading && !data ? (
@@ -396,12 +375,12 @@ export default function Workers() {
         <EmptyState
           icon={Users}
           title={
-            search || companyId || clientId
+            search || companyId
               ? "No matching workers"
               : "No workers yet"
           }
           description={
-            search || companyId || clientId
+            search || companyId 
               ? "Try changing your search or filters."
               : "Add your first worker to get started."
           }
@@ -415,7 +394,6 @@ export default function Workers() {
                   <th className="px-3 py-3 font-medium">Worker ID</th>
                   <th className="px-3 py-3 font-medium">Name</th>
                   <th className="px-3 py-3 font-medium">Company</th>
-                  <th className="px-3 py-3 font-medium">Current client</th>
                   <th className="px-3 py-3 font-medium">Job title</th>
                 </tr>
               </thead>
@@ -441,10 +419,6 @@ export default function Workers() {
 
                     <td className="px-3 py-3 text-text-muted">
                       {worker.company?.code || worker.company?.name || "—"}
-                    </td>
-
-                    <td className="px-3 py-3 text-text-muted">
-                      {worker.currentClient?.name || "Unassigned"}
                     </td>
 
                     <td className="px-3 py-3 text-text-muted">

@@ -312,7 +312,6 @@ function UploadModal({ companies, onClose, onDone }) {
                 <thead className="sticky top-0 bg-paper text-xs uppercase tracking-wide text-text-muted">
                   <tr>
                     <th className="px-3 py-2 font-medium">Worker</th>
-                    <th className="px-3 py-2 font-medium">Client</th>
                     <th className="px-3 py-2 font-medium">Role</th>
                     <th className="px-3 py-2 font-medium">Date</th>
                     <th className="px-3 py-2 font-medium">Hours</th>
@@ -326,7 +325,6 @@ function UploadModal({ companies, onClose, onDone }) {
                       key={`${record.workerId ?? ""}-${record.workDate ?? ""}-${index}`}
                     >
                       <td className="px-3 py-2">{record.workerId || "—"}</td>
-                      <td className="px-3 py-2">{record.clientId || "—"}</td>
                       <td className="px-3 py-2">{record.roleId || "—"}</td>
                       <td className="px-3 py-2">{formatDate(record.workDate)}</td>
                       <td className="px-3 py-2">{record.hours ?? "—"}</td>

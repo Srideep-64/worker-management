@@ -1,5 +1,12 @@
 import { Router } from "express";
-import { getWorkerWork, monthQuerySchema, createManualWork, createManualWorkSchema } from "../controllers/work.controller.js";
+import {
+  getWorkerWork,
+  monthQuerySchema,
+  createManualWork,
+  createManualWorkSchema,
+  updateManualWork,
+  updateManualWorkSchema,
+} from "../controllers/work.controller.js";
 import { validate } from "../middleware/validate.js";
 import {
   listWorkers,
@@ -9,9 +16,6 @@ import {
   createWorkerSchema,
   updateWorker,
   updateWorkerSchema,
-  listAssignments,
-  createAssignment,
-  createAssignmentSchema,
 } from "../controllers/workers.controller.js";
 
 const router = Router();
@@ -27,7 +31,9 @@ router.post(
   validate({ body: createManualWorkSchema }),
   createManualWork
 );
-router.get("/workers/:id/assignments", listAssignments);
-router.post("/workers/:id/assignments", validate({ body: createAssignmentSchema }), createAssignment);
-
+router.patch(
+  "/workers/:id/work/:recordId",
+  validate({ body: updateManualWorkSchema }),
+  updateManualWork
+);
 export default router;

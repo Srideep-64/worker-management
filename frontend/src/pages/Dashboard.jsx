@@ -1,8 +1,8 @@
+
 import { Link } from "react-router-dom";
 import {
   Building2,
   Users,
-  Briefcase,
   FileSpreadsheet,
 } from "lucide-react";
 
@@ -25,13 +25,16 @@ async function fetchDashboardData() {
   const requests = await Promise.allSettled([
     api.get("/companies"),
     api.get("/workers?page=1&pageSize=1"),
-    api.get("/clients?active=true"),
     api.get("/timesheets?page=1&pageSize=5"),
     api.get("/documents/expiring?days=30"),
   ]);
 
-  const [companiesResult, workersResult, clientsResult, uploadsResult, expiringResult] =
-    requests;
+  const [
+    companiesResult,
+    workersResult,
+    uploadsResult,
+    expiringResult,
+  ] = requests;
 
   const failedSections = [];
 
@@ -47,36 +50,29 @@ async function fetchDashboardData() {
   const companiesData = getValue(
     companiesResult,
     "Companies",
-    { companies: [], pagination: null }
+    { companies: [], pagination: null },
   );
 
   const workersData = getValue(
     workersResult,
     "Workers",
-    { workers: [], pagination: null }
-  );
-
-  const clientsData = getValue(
-    clientsResult,
-    "Clients",
-    { clients: [] }
+    { workers: [], pagination: null },
   );
 
   const uploadsData = getValue(
     uploadsResult,
     "Timesheet uploads",
-    { uploads: [], timesheets: [] }
+    { uploads: [], timesheets: [] },
   );
 
   const expiringData = getValue(
     expiringResult,
     "Expiring documents",
-    { items: [] }
+    { items: [] },
   );
 
   const companies = companiesData.companies || [];
   const workers = workersData.workers || [];
-  const clients = clientsData.clients || [];
   const uploads = uploadsData.uploads || uploadsData.timesheets || [];
   const expiring = expiringData.items || [];
 
@@ -91,8 +87,6 @@ async function fetchDashboardData() {
       workersData.pagination?.totalCount ??
       workers.length,
 
-    clientsCount: clients.filter((client) => client.active !== false).length,
-
     uploads,
     expiring,
     failedSections,
@@ -101,7 +95,6 @@ async function fetchDashboardData() {
 
 export default function Dashboard() {
   const { data, error, loading } = useFetch(fetchDashboardData, []);
-
   const failedSections = data?.failedSections || [];
 
   return (
@@ -126,7 +119,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Companies"
           value={loading ? "…" : data?.companiesCount ?? "—"}
@@ -137,12 +130,6 @@ export default function Dashboard() {
           label="Total workers"
           value={loading ? "…" : data?.workersCount ?? "—"}
           icon={Users}
-        />
-
-        <StatCard
-          label="Active clients"
-          value={loading ? "…" : data?.clientsCount ?? "—"}
-          icon={Briefcase}
         />
 
         <StatCard

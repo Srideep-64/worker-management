@@ -7,7 +7,6 @@ import Companies from "./pages/Companies.jsx";
 import CompanyDetail from "./pages/CompanyDetail.jsx";
 import Workers from "./pages/Workers.jsx";
 import WorkerProfile from "./pages/WorkerProfile.jsx";
-import Clients from "./pages/Clients.jsx";
 import Timesheets from "./pages/Timesheets.jsx";
 import Documents from "./pages/Documents.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -24,7 +23,6 @@ export default function App() {
           <Route path="/companies/:companyId" element={<CompanyDetail />} />
           <Route path="/workers" element={<Workers />} />
           <Route path="/workers/:workerId" element={<WorkerProfile />} />
-          <Route path="/clients" element={<Clients />} />
           <Route path="/timesheets" element={<Timesheets />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/settings" element={<Settings />} />

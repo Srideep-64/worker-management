@@ -31,20 +31,12 @@ function periodMonthToDate(str) {
 // (worker_code, client code, role code) to database IDs, scoped so a
 // worker from a different company can never silently match by code.
 async function loadValidationContext(companyId) {
-  const [workers, clients, roles] = await Promise.all([
+  const [workers, roles] = await Promise.all([
     prisma.worker.findMany({
       where: { companyId },
       select: {
         id: true,
         workerCode: true,
-        name: true,
-      },
-    }),
-
-    prisma.client.findMany({
-      select: {
-        id: true,
-        code: true,
         name: true,
       },
     }),
@@ -63,10 +55,6 @@ async function loadValidationContext(companyId) {
       workers.map((worker) => [worker.workerCode, worker])
     ),
 
-    clientsByCode: Object.fromEntries(
-      clients.map((client) => [client.code, client])
-    ),
-
     rolesByCode: Object.fromEntries(
       roles.map((role) => [role.code, role])
     ),
@@ -81,13 +69,6 @@ function buildPreview(records, context) {
     ])
   );
 
-  const clientsById = Object.fromEntries(
-    Object.values(context.clientsByCode).map((client) => [
-      client.id,
-      client,
-    ])
-  );
-
   const rolesById = Object.fromEntries(
     Object.values(context.rolesByCode).map((role) => [
       role.id,
@@ -97,15 +78,11 @@ function buildPreview(records, context) {
 
   return records.slice(0, 10).map((record) => {
     const worker = workersById[record.workerId];
-    const client = clientsById[record.clientId];
     const role = rolesById[record.roleId];
 
     return {
       workerId: worker?.workerCode ?? record.workerId,
       workerName: worker?.name ?? "Unknown worker",
-
-      clientId: client?.code ?? record.clientId,
-      clientName: client?.name ?? "Unknown client",
 
       role: role?.code ?? record.roleId,
       roleName: role?.name ?? "Unknown role",
@@ -186,7 +163,6 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
 // POST /api/timesheets/:id/confirm
 // Re-reads the stored file and re-validates from scratch rather than
 // trusting anything cached from the upload step — company data (workers,
-// clients) could have changed in between, and this keeps the confirm step
 // self-contained instead of needing a second place to store parsed rows.
 export const confirmTimesheet = asyncHandler(async (req, res) => {
   const { replace } = req.body;
@@ -331,7 +307,7 @@ export const getTimesheet = asyncHandler(async (req, res) => {
 
 // GET /api/timesheets/:id/source — "View source timesheet". Requires the
 // same auth as everything else (mounted behind requireAuth); the storage
-// key is never exposed to the client, only this proxied download.
+// key is never exposed to the clien, only this proxied download.
 export const downloadSource = asyncHandler(async (req, res) => {
   const upload = await prisma.timesheetUpload.findUnique({ where: { id: req.params.id } });
   if (!upload) throw ApiError.notFound("Timesheet upload not found");

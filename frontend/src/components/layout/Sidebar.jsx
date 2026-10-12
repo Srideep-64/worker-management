@@ -14,7 +14,6 @@ const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/companies", label: "Companies", icon: Building2 },
   { to: "/workers", label: "Workers", icon: Users },
-  { to: "/clients", label: "Clients", icon: Briefcase },
   { to: "/timesheets", label: "Timesheets", icon: FileSpreadsheet },
   { to: "/documents", label: "Documents", icon: FolderLock },
   { to: "/settings", label: "Settings", icon: SettingsIcon },

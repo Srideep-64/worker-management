@@ -13,7 +13,6 @@ export const monthQuerySchema = z.object({
 });
 
 export const createManualWorkSchema = z.object({
-  clientId: z.string().uuid(),
   roleId: z.string().uuid(),
   workDate: z.coerce.date(),
   status: z.enum([
@@ -25,6 +24,138 @@ export const createManualWorkSchema = z.object({
   hours: z.coerce.number().min(0).max(24).optional(),
 });
 
+export const updateManualWorkSchema = z.object({
+  status: z.enum([
+    "WORKED",
+    "ABSENT",
+    "HOLIDAY",
+    "WEEKLY_OFF",
+  ]),
+  roleId: z.string().uuid().optional(),
+  hours: z.coerce.number().min(0).max(24).optional(),
+});
+
+// PATCH /api/workers/:id/work/:recordId
+export const updateManualWork = asyncHandler(
+  async (req, res) => {
+    const { id: workerId, recordId } = req.params;
+    const { status, roleId, hours } = req.body;
+
+    const existing = await prisma.workRecord.findFirst({
+      where: {
+        id: recordId,
+        workerId,
+      },
+      include: RECORD_INCLUDE,
+    });
+
+    if (!existing) {
+      throw ApiError.notFound("Work record not found");
+    }
+
+    // Timesheet records must never be edited manually.
+    if (existing.source !== "MANUAL" || existing.uploadId) {
+      throw ApiError.badRequest(
+        "Timesheet records cannot be edited. Update the source timesheet instead."
+      );
+    }
+
+    if (status === "WORKED" && hours == null) {
+      throw ApiError.badRequest(
+        "Hours are required when status is WORKED"
+      );
+    }
+
+    if (status !== "WORKED" && hours != null) {
+      throw ApiError.badRequest(
+        "Hours must be omitted for non-WORKED statuses"
+      );
+    }
+
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { id: true, companyId: true },
+    });
+
+    if (!worker) {
+      throw ApiError.notFound("Worker not found");
+    }
+
+    const monthStart = new Date(
+      Date.UTC(
+        existing.workDate.getUTCFullYear(),
+        existing.workDate.getUTCMonth(),
+        1
+      )
+    );
+
+    // Protect the monthly timesheet/manual-entry invariant.
+    const activeTimesheet = await prisma.timesheetUpload.findFirst({
+      where: {
+        companyId: worker.companyId,
+        periodMonth: monthStart,
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+
+    if (activeTimesheet) {
+      throw ApiError.conflict(
+        "This month is managed by an active timesheet. Manual records cannot be edited."
+      );
+    }
+
+    // Preserve the database role for non-WORKED statuses.
+    // The UI will display the role as cleared for these statuses.
+    const nextRoleId =
+      status === "WORKED"
+        ? roleId ?? existing.roleId
+        : existing.roleId;
+
+    if (status === "WORKED" && !nextRoleId) {
+      throw ApiError.badRequest(
+        "Select a role when status is WORKED"
+      );
+    }
+
+    const role = await prisma.role.findUnique({
+      where: { id: nextRoleId },
+      select: { id: true },
+    });
+
+    if (!role) {
+      throw ApiError.badRequest(
+        "The selected role does not exist"
+      );
+    }
+
+    const updated = await prisma.workRecord.update({
+      where: { id: existing.id },
+      data: {
+        status,
+        roleId: nextRoleId,
+        hours: status === "WORKED" ? hours : null,
+      },
+      include: RECORD_INCLUDE,
+    });
+
+    res.json({
+      record: {
+        id: updated.id,
+        date: updated.workDate.toISOString().slice(0, 10),
+        status: updated.status,
+        hours:
+          updated.hours === null
+            ? null
+            : Number(updated.hours),
+        source: updated.source,
+        role: updated.role,
+        upload: updated.upload,
+      },
+    });
+  }
+);
+
 function summarize(records) {
   const s = {
     totalHours: 0,
@@ -33,7 +164,6 @@ function summarize(records) {
     holidays: 0,
     weeklyOffs: 0,
     byRole: {},
-    byClient: {},
   };
 
   for (const r of records) {
@@ -46,8 +176,6 @@ function summarize(records) {
       const role = `${r.role.code} — ${r.role.name}`;
       s.byRole[role] = (s.byRole[role] || 0) + h;
 
-      s.byClient[r.client.name] =
-        (s.byClient[r.client.name] || 0) + h;
     } else if (r.status === "ABSENT") {
       s.absentDays += 1;
     } else if (r.status === "HOLIDAY") {
@@ -65,21 +193,13 @@ function summarize(records) {
   return {
     ...s,
     byRole: list(s.byRole),
-    byClient: list(s.byClient),
   };
 }
 
 const RECORD_INCLUDE = {
   role: {
     select: {
-      code: true,
-      name: true,
-    },
-  },
-
-  client: {
-    select: {
-      id: true,
+      id:true,
       code: true,
       name: true,
     },
@@ -114,52 +234,19 @@ export const getWorkerWork = asyncHandler(async (req, res) => {
 
   const { start, end } = monthRange(month);
 
-  const [rows, assignments] = await Promise.all([
-    prisma.workRecord.findMany({
-      where: {
-        workerId: worker.id,
-        workDate: {
-          gte: start,
-          lt: end,
-        },
-      },
-      orderBy: {
-        workDate: "asc",
-      },
-      include: RECORD_INCLUDE,
-    }),
-
-    prisma.workerAssignment.findMany({
-      where: {
-        workerId: worker.id,
-        startDate: {
-          lt: end,
-        },
-        OR: [
-          {
-            endDate: null,
-          },
-          {
-            endDate: {
-              gte: start,
-            },
-          },
-        ],
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: {
-        startDate: "asc",
-      },
-    }),
-  ]);
+const rows = await prisma.workRecord.findMany({
+  where: {
+    workerId: worker.id,
+    workDate: {
+      gte: start,
+      lt: end,
+    },
+  },
+  orderBy: {
+    workDate: "asc",
+  },
+  include: RECORD_INCLUDE,
+});
 
   const records = rows.map((r) => ({
     id: r.id,
@@ -171,7 +258,6 @@ export const getWorkerWork = asyncHandler(async (req, res) => {
         : Number(r.hours),
     source: r.source,
     role: r.role,
-    client: r.client,
     upload: r.upload,
   }));
 
@@ -179,22 +265,6 @@ export const getWorkerWork = asyncHandler(async (req, res) => {
     month,
     records,
     summary: summarize(records),
-
-    assignments: assignments.map(
-      (assignment) => ({
-        id: assignment.id,
-        client: assignment.client,
-        startDate:
-          assignment.startDate
-            .toISOString()
-            .slice(0, 10),
-        endDate: assignment.endDate
-          ? assignment.endDate
-              .toISOString()
-              .slice(0, 10)
-          : null,
-      })
-    ),
   });
 });
 
@@ -204,7 +274,6 @@ export const createManualWork = asyncHandler(
     const workerId = req.params.id;
 
     const {
-      clientId,
       roleId,
       workDate,
       status,
@@ -264,31 +333,10 @@ export const createManualWork = asyncHandler(
       );
     }
 
-    const [client, role] = await Promise.all([
-      prisma.client.findUnique({
-        where: {
-          id: clientId,
-        },
-        select: {
-          id: true,
-        },
-      }),
-
-      prisma.role.findUnique({
-        where: {
-          id: roleId,
-        },
-        select: {
-          id: true,
-        },
-      }),
-    ]);
-
-    if (!client) {
-      throw ApiError.badRequest(
-        "clientId does not reference an existing client"
-      );
-    }
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+      select: { id: true },
+    });
 
     if (!role) {
       throw ApiError.badRequest(
@@ -296,35 +344,6 @@ export const createManualWork = asyncHandler(
       );
     }
 
-    const assignment =
-      await prisma.workerAssignment.findFirst({
-        where: {
-          workerId,
-          clientId,
-          startDate: {
-            lte: workDate,
-          },
-          OR: [
-            {
-              endDate: null,
-            },
-            {
-              endDate: {
-                gte: workDate,
-              },
-            },
-          ],
-        },
-        select: {
-          id: true,
-        },
-      });
-
-    if (!assignment) {
-      throw ApiError.badRequest(
-        "This worker is not assigned to the selected client on this date"
-      );
-    }
 
     const existing =
       await prisma.workRecord.findUnique({
@@ -349,7 +368,6 @@ export const createManualWork = asyncHandler(
       await prisma.workRecord.create({
         data: {
           workerId,
-          clientId,
           roleId,
           workDate,
           status,
@@ -376,7 +394,6 @@ export const createManualWork = asyncHandler(
             : Number(record.hours),
         source: record.source,
         role: record.role,
-        client: record.client,
         upload: record.upload,
       },
     });
@@ -424,11 +441,6 @@ export const getCompanyStats = asyncHandler(
             role: {
               select: {
                 code: true,
-                name: true,
-              },
-            },
-            client: {
-              select: {
                 name: true,
               },
             },

@@ -7,30 +7,8 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import { api } from "../api/client.js";
 import { useFetch } from "../hooks.js";
 
-const TABS = ["Workers", "Clients", "Monthly stats"];
+const TABS = ["Workers", "Monthly stats"];
 
-function getCurrentClients(workers = []) {
-  const clients = new Map();
-
-  workers.forEach((worker) => {
-    const client = worker.currentClient;
-
-    if (!client?.id) return;
-
-    const existing = clients.get(client.id);
-
-    if (existing) {
-      existing.count += 1;
-    } else {
-      clients.set(client.id, {
-        ...client,
-        count: 1,
-      });
-    }
-  });
-
-  return [...clients.values()];
-}
 
 function WorkersTab({ workers }) {
   if (workers.length === 0) {
@@ -52,7 +30,6 @@ function WorkersTab({ workers }) {
             <th className="px-3 py-2 font-medium">Name</th>
             <th className="px-3 py-2 font-medium">Job title</th>
             <th className="px-3 py-2 font-medium">Nationality</th>
-            <th className="px-3 py-2 font-medium">Current client</th>
           </tr>
         </thead>
 
@@ -83,58 +60,6 @@ function WorkersTab({ workers }) {
                 {worker.nationality || "—"}
               </td>
 
-              <td className="px-3 py-2.5 text-text-muted">
-                {worker.currentClient?.name || "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ClientsTab({ clients }) {
-  if (clients.length === 0) {
-    return (
-      <EmptyState
-        icon={Building2}
-        title="No current clients"
-        description="No worker in this company has an open client assignment."
-      />
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-            <th className="px-3 py-2 font-medium">Code</th>
-            <th className="px-3 py-2 font-medium">Client</th>
-            <th className="px-3 py-2 text-right font-medium">
-              Workers assigned
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {clients.map((client) => (
-            <tr
-              key={client.id}
-              className="border-b border-border last:border-0"
-            >
-              <td className="px-3 py-2.5 font-medium text-text">
-                {client.code || "—"}
-              </td>
-
-              <td className="px-3 py-2.5 text-text">
-                {client.name}
-              </td>
-
-              <td className="px-3 py-2.5 text-right tabular-nums text-text-muted">
-                {client.count}
-              </td>
             </tr>
           ))}
         </tbody>
@@ -235,7 +160,6 @@ function MonthlyStats({ companyId }) {
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {[
-              ["Hours by client", summary.byClient || []],
               ["Hours by role", summary.byRole || []],
             ].map(([title, rows]) => (
               <section key={title}>
@@ -300,7 +224,6 @@ export default function CompanyDetail() {
     return {
       company,
       workers,
-      clients: getCurrentClients(workers),
     };
   }, [companyId]);
 
@@ -367,10 +290,6 @@ export default function CompanyDetail() {
 
             {activeTab === "Workers" && (
               <WorkersTab workers={data.workers} />
-            )}
-
-            {activeTab === "Clients" && (
-              <ClientsTab clients={data.clients} />
             )}
 
             {activeTab === "Monthly stats" && (

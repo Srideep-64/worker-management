@@ -16,7 +16,6 @@ async function main() {
 
   const users = await Promise.all(
     [
-      { name: "Father (Admin)", email: "admin@yts.local" },
       { name: "Assistant One", email: "assistant1@yts.local" },
       { name: "Assistant Two", email: "assistant2@yts.local" },
       { name: "Assistant Three", email: "assistant3@yts.local" },
@@ -71,49 +70,6 @@ async function main() {
         where: { code: r.code },
         update: {},
         create: r,
-      })
-    )
-  );
-
-  // ------------------------------------------------------------
-  // Clients
-  // ------------------------------------------------------------
-
-  console.log("Seeding clients...");
-
-  const clientDefs = [
-    {
-      code: "CL-001",
-      name: "Meraas Construction",
-      phone: "+971-4-555-0101",
-      active: true,
-    },
-    {
-      code: "CL-002",
-      name: "Arabtec Site 12",
-      phone: "+971-4-555-0202",
-      active: true,
-    },
-    {
-      code: "CL-003",
-      name: "Al Futtaim Facilities",
-      phone: "+971-4-555-0303",
-      active: true,
-    },
-    {
-      code: "CL-004",
-      name: "Damac Towers Maintenance",
-      phone: "+971-4-555-0404",
-      active: false,
-    },
-  ];
-
-  const clients = await Promise.all(
-    clientDefs.map((c) =>
-      prisma.client.upsert({
-        where: { code: c.code },
-        update: {},
-        create: c,
       })
     )
   );
@@ -211,60 +167,6 @@ async function main() {
   }
 
   // ------------------------------------------------------------
-  // Worker Assignments
-  // ------------------------------------------------------------
-
-  console.log("Seeding worker assignments...");
-
-  for (let i = 0; i < workers.length; i++) {
-    const worker = workers[i];
-
-    // Skip the inactive client (CL-004) for current assignments.
-    const client = clients[i % (clients.length - 1)];
-
-    // Assignments have no natural unique key, so re-running the seed
-    // checks for an existing row first rather than relying on upsert.
-    const alreadySeeded = await prisma.workerAssignment.findFirst({
-      where: { workerId: worker.id },
-    });
-
-    if (alreadySeeded) continue;
-
-    const hasHistory = i % 3 === 0;
-
-    if (hasHistory) {
-      const previousClient = clients[(i + 1) % clients.length];
-
-      await prisma.workerAssignment.create({
-        data: {
-          workerId: worker.id,
-          clientId: previousClient.id,
-          startDate: new Date(2026, 0, 1),
-          endDate: new Date(2026, 5, 30),
-        },
-      });
-
-      await prisma.workerAssignment.create({
-        data: {
-          workerId: worker.id,
-          clientId: client.id,
-          startDate: new Date(2026, 6, 1),
-          endDate: null,
-        },
-      });
-    } else {
-      await prisma.workerAssignment.create({
-        data: {
-          workerId: worker.id,
-          clientId: client.id,
-          startDate: new Date(2026, 6, 1),
-          endDate: null,
-        },
-      });
-    }
-  }
-
-  // ------------------------------------------------------------
   // Sample ACTIVE Timesheet + Work Records
   // Company A, September 2026
   // ------------------------------------------------------------
@@ -303,7 +205,6 @@ async function main() {
     );
 
     const roleByIndex = roles;
-    const clientForRecords = clients[0];
 
     const records = [];
 
@@ -311,12 +212,12 @@ async function main() {
       for (let day = 1; day <= 5; day++) {
         records.push({
           workerId: worker.id,
-          clientId: clientForRecords.id,
           roleId: roleByIndex[day % roleByIndex.length].id,
           workDate: new Date(2026, 8, day),
           hours: day === 5 ? null : 8,
           status: day === 5 ? "WEEKLY_OFF" : "WORKED",
           uploadId: upload.id,
+          source:"TIMESHEET",
         });
       }
     }

@@ -15,6 +15,9 @@
     "prisma:studio": "prisma studio",
     "seed": "node prisma/seed.js"
   },
+  "prisma": {
+  "seed": "node prisma/seed.js"
+},
   "dependencies": {
     "@prisma/client": "^5.19.1",
     "argon2": "^0.41.1",
