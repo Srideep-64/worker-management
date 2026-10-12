@@ -43,6 +43,7 @@ export default function WorkCalendar({ workerId }) {
 
   const entryInputRef = useRef(null);
   const shouldFocusEntryRef = useRef(false);
+  const confirmEditRef = useRef(null);
 
   const month = monthKey(ym.y, ym.m);
 
@@ -112,6 +113,19 @@ export default function WorkCalendar({ workerId }) {
 
       return () => cancelAnimationFrame(frame);
     }, [selected, selectedRoleId, isEditingManual, pendingEdit, saving]);
+
+      useEffect(() => {
+      if (!pendingEdit) return;
+
+      const frame = requestAnimationFrame(() => {
+        confirmEditRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+
+      return () => cancelAnimationFrame(frame);
+    }, [pendingEdit]);
     
   function clearPendingEntry() {
     setEntryValue("");
@@ -512,18 +526,23 @@ export default function WorkCalendar({ workerId }) {
       />
 
       {/* Confirmation for editing existing manual records */}
-      <ConfirmWorkChange
-        pendingEdit={pendingEdit}
-        saving={saving}
-        onConfirm={confirmEdit}
-        onCancel={cancelEdit}
-      />
+      <div ref={confirmEditRef}>
+        <ConfirmWorkChange
+          pendingEdit={pendingEdit}
+          saving={saving}
+          onConfirm={confirmEdit}
+          onCancel={cancelEdit}
+        />
+      </div>
 
       {/* Monthly summary */}
       <WorkSummary
+        workerId={workerId}
+        month={month}
         summary={summary}
         data={data}
         records={records}
+
       />
     </div>
   );

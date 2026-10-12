@@ -167,8 +167,16 @@ function WorkersTab({ workers, companyId }) {
 function MonthlyStats({ companyId }) {
   const now = new Date();
 
+  const previousMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() - 1,
+          1
+        );
+
   const [month, setMonth] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      `${previousMonth.getFullYear()}-${String(
+        previousMonth.getMonth() + 1
+      ).padStart(2, "0")}`
   );
 
   const {
