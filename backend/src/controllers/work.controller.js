@@ -21,7 +21,7 @@ export const createManualWorkSchema = z.object({
     "HOLIDAY",
     "WEEKLY_OFF",
   ]),
-  hours: z.coerce.number().min(0).max(24).optional(),
+  hours: z.coerce.number().gt(0).max(24).optional(),
 });
 
 export const updateManualWorkSchema = z.object({
@@ -32,7 +32,7 @@ export const updateManualWorkSchema = z.object({
     "WEEKLY_OFF",
   ]),
   roleId: z.string().uuid().optional(),
-  hours: z.coerce.number().min(0).max(24).optional(),
+  hours: z.coerce.number().gt(0).max(24).optional(),
 });
 
 // PATCH /api/workers/:id/work/:recordId

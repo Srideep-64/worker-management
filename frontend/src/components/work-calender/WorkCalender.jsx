@@ -251,6 +251,17 @@ export default function WorkCalendar({ workerId }) {
       return;
     }
 
+    // Validate hours for WORKED records.
+    if (
+      next.status === "WORKED" &&
+      (!Number.isFinite(Number(next.hours)) ||
+        Number(next.hours) <= 0 ||
+        Number(next.hours) > 24)
+    ) {
+      setSaveError("Hours must be greater than 0 and at most 24.");
+      return;
+    }
+
     const existing = byDate[selected];
 
     // Existing records: only manual records can be edited.
