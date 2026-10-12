@@ -8,6 +8,11 @@ const roleDefs = [
   { code: "SF", name: "Steel Fixer" },
   { code: "MS", name: "Mason" },
   { code: "HP", name: "Helper" },
+  { code: "WD", name: "Welder" },
+  { code: "DM", name: "Ductman" },
+  { code: "CP", name: "Carpenter" },
+  { code: "PB", name: "Plumber" },
+  { code: "OR", name: "Other role" },
 ];
 
 async function main() {

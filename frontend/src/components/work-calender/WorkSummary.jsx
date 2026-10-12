@@ -61,10 +61,6 @@ export default function WorkSummary({ summary, data, records }) {
           rows={summary.byRole}
         />
 
-        <Breakdown
-          title="Hours by client"
-          rows={summary.byClient}
-        />
       </div>
 
       {data?.activeUpload?.originalFilename && (
