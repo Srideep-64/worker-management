@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft, Users, Building2 } from "lucide-react";
+import { ChevronLeft, Users,   FileSpreadsheet,
+  FileText, } from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -164,7 +165,66 @@ function WorkersTab({ workers, companyId }) {
 }
 
 
-function MonthlyStats({ companyId }) {
+async function downloadCompanyReport(companyId, month, format, companyCode) {
+  const apiBase = (
+    import.meta.env.VITE_API_BASE_URL || "/api"
+  ).replace(/\/$/, "");
+
+  const url =
+    `${apiBase}/companies/${encodeURIComponent(companyId)}` +
+    `/monthly-report/${format}?month=${encodeURIComponent(month)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    let message = `Failed to download ${format.toUpperCase()} report.`;
+
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      message =
+        payload.error?.message ||
+        payload.message ||
+        message;
+    }
+
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = objectUrl;
+
+  const monthName = new Date(`${month}-01T12:00:00`)
+    .toLocaleDateString("en-US", {
+      month: "short",
+      timeZone: "Asia/Dubai",
+    });
+
+  const year = month.slice(0, 4);
+
+  const monthLabel = `${monthName}-${year}`;
+
+  link.download =
+    format === "excel"
+      ? `${companyCode}-timesheet-${monthLabel}.xlsx`
+      : `${companyCode}-payroll-${monthLabel}.pdf`;
+
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+
+function MonthlyStats({ companyId,companyCode}) {
   const now = new Date();
 
   const previousMonth = new Date(
@@ -178,6 +238,24 @@ function MonthlyStats({ companyId }) {
         previousMonth.getMonth() + 1
       ).padStart(2, "0")}`
   );
+
+  const [downloading, setDownloading] = useState("");
+  const [downloadError, setDownloadError] = useState("");
+
+  async function handleDownload(format) {
+    setDownloading(format);
+    setDownloadError("");
+
+    try {
+      await downloadCompanyReport(companyId, month, format,companyCode);
+    } catch (err) {
+      setDownloadError(
+        err.message || "Unable to download the report."
+      );
+    } finally {
+      setDownloading("");
+    }
+  }
 
   const {
     data,
@@ -221,12 +299,14 @@ function MonthlyStats({ companyId }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div>
         <label
           htmlFor="stats-month"
-          className="text-sm font-medium text-text"
+          className="mb-1 block text-sm font-medium text-text"
         >
-          Select month
+          Reporting month
         </label>
 
         <input
@@ -241,6 +321,40 @@ function MonthlyStats({ companyId }) {
           }}
         />
       </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={Boolean(downloading)}
+          onClick={() => handleDownload("excel")}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {downloading === "excel"
+            ? "Downloading Excel..."
+            : "Download Excel"}
+        </button>
+
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={Boolean(downloading)}
+          onClick={() => handleDownload("pdf")}
+        >
+          <FileText className="h-4 w-4" />
+          {downloading === "pdf"
+            ? "Downloading PDF..."
+            : "Download PDF"}
+        </button>
+      </div>
+    </div>
+
+    {downloadError && (
+      <p role="alert" className="text-sm text-danger">
+        {downloadError}
+      </p>
+    )}
+
 
       {error && (
         <p role="alert" className="text-sm text-danger">
@@ -457,7 +571,7 @@ export default function CompanyDetail() {
             )}
 
             {activeTab === "Monthly stats" && (
-              <MonthlyStats companyId={companyId} />
+              <MonthlyStats companyId={companyId} companyCode={company.code}/>
             )}
           </>
         )}
