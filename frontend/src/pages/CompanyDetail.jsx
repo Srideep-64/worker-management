@@ -190,6 +190,24 @@ function MonthlyStats({ companyId }) {
 
   const summary = data?.summary;
 
+    const payroll = data?.payrollSummary;
+
+    const formatAED = (value) =>
+      new Intl.NumberFormat("en-AE", {
+        style: "currency",
+        currency: "AED",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value ?? 0);
+
+    const payrollCards = [
+      ["Gross pay", payroll?.grossPay],
+      ["Absence deductions", payroll?.absenceDeductions],
+      ["Net pay", payroll?.netPay],
+      ["Total advances", payroll?.totalAdvances],
+      ["Remaining pay", payroll?.remainingPay],
+    ];
+
   const statCards = [
     ["Total hours", summary?.totalHours],
     ["Workers", data?.workersWithRecords],
@@ -261,6 +279,48 @@ function MonthlyStats({ companyId }) {
               </div>
             ))}
           </div>
+
+          
+        {payroll && (
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-text">
+                Monthly payroll
+              </h3>
+
+              {payroll.workersWithoutRate > 0 && (
+                <p className="text-xs text-text-muted">
+                  {payroll.workersWithoutRate} worker(s) without an hourly rate
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {payrollCards.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-md border border-border px-3 py-3"
+                >
+                  <p className="text-xs uppercase tracking-wide text-text-muted">
+                    {label}
+                  </p>
+
+                  <p
+                    className={`mt-1 text-lg font-semibold tabular-nums ${
+                      label === "Remaining pay" &&
+                      Number(value ?? 0).toFixed(2) === "0.00"
+                        ? "text-green-600"
+                        : "text-text"
+                    }`}
+                  >
+                    {formatAED(value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {[

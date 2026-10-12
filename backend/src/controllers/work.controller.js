@@ -401,81 +401,189 @@ export const createManualWork = asyncHandler(
 );
 
 // GET /api/companies/:id/stats?month=YYYY-MM
-export const getCompanyStats = asyncHandler(
-  async (req, res) => {
-    const company =
-      await prisma.company.findUnique({
+
+export const getCompanyStats = asyncHandler(async (req, res) => {
+  const company = await prisma.company.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+
+  if (!company) {
+    throw ApiError.notFound("Company not found");
+  }
+
+  const month = req.query.month || currentMonthString();
+  const { start, end } = monthRange(month);
+
+  // Get every worker belonging to this company.
+  const workers = await prisma.worker.findMany({
+    where: { companyId: company.id },
+    select: { id: true },
+  });
+
+  const workerIds = workers.map((worker) => worker.id);
+
+  const [rows, activeUpload, payrollRates, advances] =
+    await Promise.all([
+      prisma.workRecord.findMany({
         where: {
-          id: req.params.id,
+          workerId: { in: workerIds },
+          workDate: { gte: start, lt: end },
+        },
+        select: {
+          workerId: true,
+          status: true,
+          hours: true,
+          role: {
+            select: { code: true, name: true },
+          },
+        },
+      }),
+
+      prisma.timesheetUpload.findFirst({
+        where: {
+          companyId: company.id,
+          periodMonth: start,
+          status: "ACTIVE",
         },
         select: {
           id: true,
+          originalFilename: true,
+          uploadedAt: true,
         },
-      });
+      }),
 
-    if (!company) {
-      throw ApiError.notFound("Company not found");
+      prisma.workerPayroll.findMany({
+        where: {
+          workerId: { in: workerIds },
+          payrollMonth: start,
+        },
+        select: {
+          workerId: true,
+          hourlyRate: true,
+        },
+      }),
+
+      prisma.advancePayment.findMany({
+        where: {
+          workerId: { in: workerIds },
+          payrollMonth: start,
+        },
+        select: {
+          workerId: true,
+          amount: true,
+        },
+      }),
+    ]);
+
+  // Preserve the existing attendance statistics.
+  const records = rows.map((record) => ({
+    ...record,
+    hours:
+      record.hours == null ? null : Number(record.hours),
+  }));
+
+  const summary = summarize(records);
+
+  // Calculate attendance totals separately for each worker.
+  const attendanceByWorker = new Map();
+
+  for (const record of records) {
+    if (!attendanceByWorker.has(record.workerId)) {
+      attendanceByWorker.set(record.workerId, {
+        totalHours: 0,
+        absentDays: 0,
+      });
     }
 
-    const month =
-      req.query.month || currentMonthString();
+    const attendance = attendanceByWorker.get(record.workerId);
 
-    const { start, end } = monthRange(month);
-
-    const [rows, activeUpload] =
-      await Promise.all([
-        prisma.workRecord.findMany({
-          where: {
-            worker: {
-              companyId: company.id,
-            },
-            workDate: {
-              gte: start,
-              lt: end,
-            },
-          },
-          select: {
-            workerId: true,
-            status: true,
-            hours: true,
-            role: {
-              select: {
-                code: true,
-                name: true,
-              },
-            },
-          },
-        }),
-
-        prisma.timesheetUpload.findFirst({
-          where: {
-            companyId: company.id,
-            periodMonth: start,
-            status: "ACTIVE",
-          },
-          select: {
-            id: true,
-            originalFilename: true,
-            uploadedAt: true,
-          },
-        }),
-      ]);
-
-    const records = rows.map((r) => ({
-      ...r,
-      hours:
-        r.hours === null
-          ? null
-          : Number(r.hours),
-    }));
-
-    res.json({
-      month,
-      activeUpload,
-      workersWithRecords: new Set(
-        rows.map((r) => r.workerId)
-      ).size,
-      summary: summarize(records),
-    });
+    if (record.status === "WORKED") {
+      attendance.totalHours += record.hours ?? 0;
+    } else if (record.status === "ABSENT") {
+      attendance.absentDays += 1;
+    }
   }
-);
+
+  const rateByWorker = new Map(
+    payrollRates.map((payroll) => [
+      payroll.workerId,
+      Number(payroll.hourlyRate),
+    ])
+  );
+
+  const advancesByWorker = new Map();
+
+  for (const advance of advances) {
+    advancesByWorker.set(
+      advance.workerId,
+      (advancesByWorker.get(advance.workerId) ?? 0) +
+        Number(advance.amount)
+    );
+  }
+
+  let workersWithRate = 0;
+  let workersWithoutRate = 0;
+  let grossPay = 0;
+  let absenceDeductions = 0;
+  let netPay = 0;
+  let totalAdvances = 0;
+
+  for (const worker of workers) {
+    const hourlyRate = rateByWorker.get(worker.id);
+
+    // A missing rate must not be treated as a zero salary.
+    if (hourlyRate === undefined) {
+      workersWithoutRate += 1;
+      continue;
+    }
+
+    workersWithRate += 1;
+
+    const attendance = attendanceByWorker.get(worker.id) ?? {
+      totalHours: 0,
+      absentDays: 0,
+    };
+
+    const workerGrossPay =
+      attendance.totalHours * hourlyRate;
+
+    const workerAbsenceDeduction =
+      Math.max(0, attendance.absentDays - 2) * 25;
+
+    const workerNetPay =
+      workerGrossPay - workerAbsenceDeduction;
+
+    const workerAdvances =
+      advancesByWorker.get(worker.id) ?? 0;
+
+    grossPay += workerGrossPay;
+    absenceDeductions += workerAbsenceDeduction;
+    netPay += workerNetPay;
+    totalAdvances += workerAdvances;
+  }
+
+  // Round monetary aggregates to two decimal places.
+  const money = (value) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
+  const payrollSummary = {
+    workersWithRate,
+    workersWithoutRate,
+    grossPay: money(grossPay),
+    absenceDeductions: money(absenceDeductions),
+    netPay: money(netPay),
+    totalAdvances: money(totalAdvances),
+    remainingPay: money(netPay - totalAdvances),
+  };
+
+  res.json({
+    month,
+    activeUpload,
+    workersWithRecords: new Set(
+      rows.map((record) => record.workerId)
+    ).size,
+    summary,
+    payrollSummary,
+  });
+});
