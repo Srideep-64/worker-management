@@ -7,6 +7,19 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { monthRange, currentMonthString } from "../utils/dates.js";
 import { getCompanyMonthlyReport } from "../utils/companyMonthlyReport.js";
 
+function formatReportMonth(month) {
+  const [year, monthNumber] = month.split("-");
+
+  const monthName = new Date(
+    Date.UTC(Number(year), Number(monthNumber) - 1, 1)
+  ).toLocaleString("en-US", {
+    month: "short",
+    timeZone: "Asia/Dubai",
+  });
+
+  return `${monthName}-${year}`;
+}
+
 export const companyReportQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
 });
@@ -76,6 +89,7 @@ export const getCompanyReportChecks = asyncHandler(async (req, res) => {
 export const exportCompanyMonthlyExcel = asyncHandler(
   async (req, res) => {
     const month = req.query.month || currentMonthString();
+    const displayMonth = formatReportMonth(month);
 
     // Also validates that the company exists.
     const report = await getCompanyMonthlyReport(
@@ -120,9 +134,9 @@ export const exportCompanyMonthlyExcel = asyncHandler(
     ]);
 
     const worksheet = XLSX.utils.aoa_to_sheet([
-    [`${report.company.name} — Monthly Attendance`],
+    [`${report.company.name} — ${displayMonth} Attendance`],
     [`Company Code: ${report.company.code}`],
-    [`Reporting Month: ${month}`],
+    [`Reporting Month: ${displayMonth}`],
    [
     `Generated At: ${
         new Intl.DateTimeFormat("en-AE", {
@@ -189,6 +203,7 @@ export const exportCompanyMonthlyExcel = asyncHandler(
 export const exportCompanyMonthlyPdf = asyncHandler(
   async (req, res) => {
     const month = req.query.month || currentMonthString();
+    const displayMonth = formatReportMonth(month);
 
     const report = await getCompanyMonthlyReport(
       req.params.id,
@@ -262,7 +277,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
       .fontSize(9)
       .text(`Company Code: ${report.company.code}`, left, 48);
 
-    doc.text(`Reporting Month: ${month}`, left, 61);
+    doc.text(`Reporting Month: ${displayMonth}`, left, 61);
 
     doc.text(`Generated At: ${generatedAt}`, left, 74);
 

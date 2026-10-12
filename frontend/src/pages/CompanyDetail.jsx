@@ -166,12 +166,9 @@ function WorkersTab({ workers, companyId }) {
 
 
 async function downloadCompanyReport(companyId, month, format, companyCode) {
-  const apiBase = (
-    import.meta.env.VITE_API_BASE_URL || "/api"
-  ).replace(/\/$/, "");
-
+  
   const url =
-    `${apiBase}/companies/${encodeURIComponent(companyId)}` +
+    `/api/companies/${encodeURIComponent(companyId)}` +
     `/monthly-report/${format}?month=${encodeURIComponent(month)}`;
 
   const response = await fetch(url, {
