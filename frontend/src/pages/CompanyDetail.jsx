@@ -9,8 +9,55 @@ import { useFetch } from "../hooks.js";
 
 const TABS = ["Workers", "Monthly stats"];
 
+function WorkersTab({ workers, companyId }) {
+  const now = new Date();
 
-function WorkersTab({ workers }) {
+  // Previous calendar month by default.
+  const previousMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() - 1,
+    1
+  );
+
+  const [month, setMonth] = useState(
+    `${previousMonth.getFullYear()}-${String(
+      previousMonth.getMonth() + 1
+    ).padStart(2, "0")}`
+  );
+
+  const { data, error, loading } = useFetch(
+    async () => {
+      const results = await Promise.all(
+        workers.map(async (worker) => {
+          try {
+            const response = await api.get(
+              `/workers/${worker.id}/work?month=${month}`
+            );
+
+            return {
+              workerId: worker.id,
+              totalHours: response.summary?.totalHours ?? 0,
+              absentDays: response.summary?.absentDays ?? 0,
+              failed: false,
+            };
+          } catch {
+            return {
+              workerId: worker.id,
+              failed: true,
+            };
+          }
+        })
+      );
+
+      return results;
+    },
+    [companyId, workers, month]
+  );
+
+  const hoursByWorker = new Map(
+    (data || []).map((item) => [item.workerId, item])
+  );
+
   if (workers.length === 0) {
     return (
       <EmptyState
@@ -22,51 +69,100 @@ function WorkersTab({ workers }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[600px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-            <th className="px-3 py-2 font-medium">Worker ID</th>
-            <th className="px-3 py-2 font-medium">Name</th>
-            <th className="px-3 py-2 font-medium">Job title</th>
-            <th className="px-3 py-2 font-medium">Nationality</th>
-          </tr>
-        </thead>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-medium text-text">
+          Monthly worker attendance
+        </p>
 
-        <tbody>
-          {workers.map((worker) => (
-            <tr
-              key={worker.id}
-              className="border-b border-border last:border-0"
-            >
-              <td className="px-3 py-2.5 font-medium">
-                <Link
-                  to={`/workers/${worker.id}`}
-                  className="text-accent-dark hover:underline"
-                >
-                  {worker.workerCode}
-                </Link>
-              </td>
+        <input
+          type="month"
+          aria-label="Select month"
+          className="input w-auto"
+          value={month}
+          onChange={(event) => {
+            if (event.target.value) {
+              setMonth(event.target.value);
+            }
+          }}
+        />
+      </div>
 
-              <td className="px-3 py-2.5 text-text">
-                {worker.name}
-              </td>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error.message || "Unable to load worker statistics."}
+        </p>
+      )}
 
-              <td className="px-3 py-2.5 text-text-muted">
-                {worker.jobTitle || "—"}
-              </td>
-
-              <td className="px-3 py-2.5 text-text-muted">
-                {worker.nationality || "—"}
-              </td>
-
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
+              <th className="px-3 py-2 font-medium">Worker ID</th>
+              <th className="px-3 py-2 font-medium">Name</th>
+              <th className="px-3 py-2 font-medium">Job title</th>
+              <th className="px-3 py-2 font-medium">
+                Work hours
+              </th>
+              <th className="px-3 py-2 font-medium">
+                Absent days
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {workers.map((worker) => {
+              const stats = hoursByWorker.get(worker.id);
+
+              const unavailable = stats?.failed;
+
+              return (
+                <tr
+                  key={worker.id}
+                  className="border-b border-border last:border-0"
+                >
+                  <td className="px-3 py-2.5 font-medium">
+                    <Link
+                      to={`/workers/${worker.id}`}
+                      className="text-accent-dark hover:underline"
+                    >
+                      {worker.workerCode}
+                    </Link>
+                  </td>
+
+                  <td className="px-3 py-2.5 text-text">
+                    {worker.name}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-text-muted">
+                    {worker.jobTitle || "—"}
+                  </td>
+
+                  <td className="px-3 py-2.5 tabular-nums text-text-muted">
+                    {loading
+                      ? "..."
+                      : unavailable
+                        ? "—"
+                        : `${stats?.totalHours ?? 0} h`}
+                  </td>
+
+                  <td className="px-3 py-2.5 tabular-nums text-text-muted">
+                    {loading
+                      ? "..."
+                      : unavailable
+                        ? "—"
+                        : stats?.absentDays ?? 0}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
+
 
 function MonthlyStats({ companyId }) {
   const now = new Date();
@@ -289,7 +385,7 @@ export default function CompanyDetail() {
             </div>
 
             {activeTab === "Workers" && (
-              <WorkersTab workers={data.workers} />
+              <WorkersTab workers={data.workers} companyId={companyId}/>
             )}
 
             {activeTab === "Monthly stats" && (
