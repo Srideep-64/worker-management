@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, Moon, Sun} from "lucide-react";
+import { useTheme } from "../../context/ThemeContext.jsx";
 
 import { useAuth } from "../../context/AuthContext.jsx";
 
@@ -20,6 +21,7 @@ function titleFor(pathname) {
 }
 
 export default function Topbar({ onMenuClick }) {
+  const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
 
@@ -48,6 +50,22 @@ export default function Topbar({ onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-text-muted transition-colors hover:bg-paper hover:text-text"
+          title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          aria-pressed={theme === "dark"}
+        >
+          {theme === "light" ? (
+            <Moon className="h-4 w-4" />
+          ) : (
+            <Sun className="h-4 w-4" />
+          )}
+        </button>
+
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-white">
             {initials}

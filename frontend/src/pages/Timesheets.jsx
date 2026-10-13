@@ -8,6 +8,11 @@ import Modal from "../components/ui/Modal.jsx";
 
 import { api, qs } from "../api/client.js";
 import { useFetch, fmtMonth } from "../hooks.js";
+import {
+  getCachedCompanies,
+  getCachedTimesheets,
+  invalidateTimesheetCaches,
+} from "../utils/timesheetCache.js";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -65,10 +70,12 @@ function UploadModal({ companies, onClose, onDone }) {
     formData.append("file", file);
 
     try {
-      const response = await api.post("/timesheets/upload", formData);
+    const response = await api.post("/timesheets/upload", formData);
 
-      setResult(response);
-      setStep("preview");
+    invalidateTimesheetCaches();
+
+    setResult(response);
+    setStep("preview");
     } catch (err) {
       const errors = getValidationErrors(err);
 
@@ -380,30 +387,40 @@ export default function Timesheets() {
   const [companyId, setCompanyId] = useState("");
   const [status, setStatus] = useState("");
   const [showUpload, setShowUpload] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refreshData = () => {
+    invalidateTimesheetCaches();
+    setRefreshKey((key) => key + 1);
+  };
 
   const companiesQuery = useFetch(
-    async () => {
-      const response = await api.get("/companies");
-      return response.companies || [];
-    },
-    []
+    () =>
+      getCachedCompanies(async () => {
+        const response = await api.get("/companies");
+        return response.companies || [];
+      }),
+    [refreshKey]
   );
 
   const {
     data,
     error,
     loading,
-    reload,
   } = useFetch(
-    () =>
-      api.get(
-        `/timesheets${qs({
-          companyId,
-          status,
-          pageSize: 50,
-        })}`
-      ),
-    [companyId, status]
+    () => {
+      const query = qs({
+        companyId,
+        status,
+        pageSize: 50,
+      });
+
+      return getCachedTimesheets(
+        `/timesheets${query}`,
+        () => api.get(`/timesheets${query}`)
+      );
+    },
+    [companyId, status, refreshKey]
   );
 
   const companies = companiesQuery.data || [];
@@ -414,15 +431,19 @@ export default function Timesheets() {
       title="Timesheets"
       action={
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary inline-flex items-center gap-2"
-            onClick={reload}
-            disabled={loading}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
+        <button
+          type="button"
+          className="btn-secondary inline-flex items-center gap-2"
+          onClick={refreshData}
+          disabled={loading || companiesQuery.loading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${
+              loading || companiesQuery.loading ? "animate-spin" : ""
+            }`}
+          />
+          {loading || companiesQuery.loading ? "Refreshing…" : "Refresh"}
+        </button>
 
           <button
             type="button"
@@ -555,7 +576,7 @@ export default function Timesheets() {
           onClose={() => setShowUpload(false)}
           onDone={() => {
             setShowUpload(false);
-            reload();
+            refreshData();
           }}
         />
       )}

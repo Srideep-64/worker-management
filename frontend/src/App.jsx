@@ -1,4 +1,7 @@
+
 import { Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext.jsx";
+
 import AppLayout from "./components/layout/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import Login from "./pages/Login.jsx";
@@ -12,22 +15,30 @@ import Settings from "./pages/Settings.jsx";
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <ThemeProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/companies/:companyId" element={<CompanyDetail />} />
-          <Route path="/workers" element={<Workers />} />
-          <Route path="/workers/:workerId" element={<WorkerProfile />} />
-          <Route path="/timesheets" element={<Timesheets />} />
-          <Route path="/documents" element={<Documents />} />
-          <Route path="/settings" element={<Settings />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route
+              path="/companies/:companyId"
+              element={<CompanyDetail />}
+            />
+            <Route path="/workers" element={<Workers />} />
+            <Route
+              path="/workers/:workerId"
+              element={<WorkerProfile />}
+            />
+            <Route path="/timesheets" element={<Timesheets />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ThemeProvider>
   );
 }

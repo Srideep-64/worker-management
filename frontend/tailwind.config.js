@@ -1,37 +1,38 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#161B22",
-          soft: "#232A35",
-          muted: "#3A4250",
+          DEFAULT: "var(--color-ink)",
+          soft: "var(--color-ink-soft)",
+          muted: "var(--color-ink-muted)",
         },
-        paper: "#F6F4EF",
-        surface: "#FFFFFF",
-        border: "#E3DFD3",
+        paper: "var(--color-paper)",
+        surface: "var(--color-surface)",
+        border: "var(--color-border)",
         text: {
-          DEFAULT: "#1C2127",
-          muted: "#6E6A5F",
+          DEFAULT: "var(--color-text)",
+          muted: "var(--color-text-muted)",
         },
         accent: {
-          DEFAULT: "#DB8B2B",
-          soft: "#F4E3C6",
-          dark: "#B96F1A",
+          DEFAULT: "var(--color-accent)",
+          soft: "var(--color-accent-soft)",
+          dark: "var(--color-accent-dark)",
         },
         success: {
-          DEFAULT: "#3F7D5C",
-          soft: "#DEEBE3",
+          DEFAULT: "var(--color-success)",
+          soft: "var(--color-success-soft)",
         },
         danger: {
-          DEFAULT: "#B8453C",
-          soft: "#F5DFDC",
+          DEFAULT: "var(--color-danger)",
+          soft: "var(--color-danger-soft)",
         },
         info: {
-          DEFAULT: "#3B6E91",
-          soft: "#DCE8EE",
+          DEFAULT: "var(--color-info)",
+          soft: "var(--color-info-soft)",
         },
       },
       fontFamily: {

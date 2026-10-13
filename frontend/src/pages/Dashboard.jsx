@@ -250,7 +250,7 @@ function CompanyMonthlyCard({ company, month }) {
   return (
     <Link
       to={`/companies/${company.id}`}
-     className="group block rounded-xl border border-border bg-white p-4 transition-colors hover:border-accent hover:bg-white"
+     className="group block rounded-xl border border-border bg-surface p-4 transition-colors hover:border-accent hover:bg-surface"
     >
       {/* Company heading */}
       <div className="flex items-start justify-between gap-3">
@@ -259,20 +259,20 @@ function CompanyMonthlyCard({ company, month }) {
             {company.code || "Company"}
           </p>
 
-          <h3 className="mt-1 truncate font-semibold text-foreground group-hover:text-accent">
+          <h3 className="mt-1 truncate font-semibold text-text group-hover:text-accent">
             {company.name}
           </h3>
         </div>
 
         <Building2
           size={20}
-          className="shrink-0 text-muted-foreground transition-colors group-hover:text-accent"
+          className="shrink-0 text-text-muted transition-colors group-hover:text-accent"
         />
       </div>
 
       {/* Worker count and monthly hours */}
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-text-muted">
           {workerCount} workers
         </span>
 
@@ -361,13 +361,13 @@ function ExpiringDocuments() {
   }
 
   return (
-    <section className="rounded-xl border border-border bg-white p-5">
+    <section className="rounded-xl border border-border bg-surface p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">
+          <h2 className="text-base font-semibold text-text">
             Documents expiring within 30 days
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-text-muted">
             Track upcoming document expirations.
           </p>
         </div>
@@ -443,7 +443,7 @@ function ExpiringDocuments() {
                 return (
                   <tr
                     key={`${document.workerId}-${document.type}-${document.expiry}`}
-                    className="border-b border-border last:border-0 hover:bg-gray-50"
+                    className="border-b border-border last:border-0 transition-colors hover:bg-paper"
                   >
                     <td className="px-3 py-3">
                       <Link
@@ -469,12 +469,12 @@ function ExpiringDocuments() {
                         {Number.isFinite(daysLeft) && (
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-medium ${
-                              daysLeft < 0
-                                ? "bg-red-100 text-red-700"
-                                : daysLeft <= 7
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-gray-100 text-gray-600"
-                            }`}
+                                daysLeft < 0
+                                  ? "bg-danger-soft text-danger"
+                                  : daysLeft <= 7
+                                    ? "bg-accent-soft text-accent-dark"
+                                    : "bg-paper text-text-muted"
+                              }`}
                           >
                             {daysLeft < 0
                               ? "Expired"
