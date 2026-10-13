@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { ChevronLeft, FileText, User } from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
@@ -9,6 +9,12 @@ import EditWorkerModal from "../components/worker/EditWorkerModal.jsx";
 
 import { api } from "../api/client.js";
 import { useFetch, fmtDate } from "../hooks.js";
+
+import {
+  getCachedWorkerProfile,
+  setCachedWorkerProfile,
+  invalidateWorkerProfile,
+} from "../utils/profileCache.js";
 
 function Field({ label, value }) {
   return (
@@ -21,10 +27,10 @@ function Field({ label, value }) {
   );
 }
 
-function Avatar({ workerId, version }) {
+function Avatar({ workerId, version, hasPhoto }) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
+  if (!hasPhoto || failed) {
     return (
       <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-paper text-text-muted">
         <User className="h-7 w-7" strokeWidth={1.5} />
@@ -50,12 +56,30 @@ export default function WorkerProfile() {
     error,
     loading,
     reload,
-  } = useFetch(() => api.get(`/workers/${workerId}`), [workerId]);
+  } = useFetch(async () => {
+    const cached = getCachedWorkerProfile(workerId);
+
+    if (cached !== null) {
+      return cached;
+    }
+
+    const response = await api.get(`/workers/${workerId}`);
+
+    setCachedWorkerProfile(workerId, response);
+
+    return response;
+  }, [workerId]);
 
   const worker = workerData?.worker ?? workerData;
 
   const [editing, setEditing] = useState(false);
   const [photoVersion, setPhotoVersion] = useState(0);
+  const [hasPhoto, setHasPhoto] = useState(false);
+
+  const location = useLocation();
+
+  const returnTo = location.state?.returnTo || "/workers";
+  const returnLabel = location.state?.returnLabel || "Workers";
 
   if (loading && !worker) {
     return (
@@ -88,11 +112,12 @@ export default function WorkerProfile() {
   return (
     <div className="space-y-4">
       <Link
-        to="/workers"
+        to={returnTo}
+        state={{ activeTab: location.state?.returnTab || "Workers"}}
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
       >
         <ChevronLeft className="h-4 w-4" />
-        Workers
+        {returnLabel}
       </Link>
 
       {/* Worker overview */}
@@ -103,6 +128,7 @@ export default function WorkerProfile() {
               key={photoVersion}
               workerId={worker.id}
               version={photoVersion}
+                hasPhoto={hasPhoto}
             />
 
             <div className="min-w-0">
@@ -162,6 +188,7 @@ export default function WorkerProfile() {
             onPhotoChanged={() =>
               setPhotoVersion((version) => version + 1)
             }
+            onPhotoAvailabilityChange={setHasPhoto}
           />
         </Card>
 
@@ -176,6 +203,7 @@ export default function WorkerProfile() {
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);
+            invalidateWorkerProfile(workerId)
             reload();
           }}
         />

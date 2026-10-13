@@ -29,3 +29,29 @@ export function setCachedPayroll(workerId, month, data) {
 export function invalidateCachedPayroll(workerId, month) {
   payrollCache.delete(payrollKey(workerId, month));
 }
+const workerProfileCache = new Map();
+
+export function getCachedWorkerProfile(workerId) {
+  return workerProfileCache.get(workerId) ?? null;
+}
+
+export function setCachedWorkerProfile(workerId, data) {
+  workerProfileCache.set(workerId, data);
+}
+
+export function invalidateWorkerProfile(workerId) {
+  workerProfileCache.delete(workerId);
+}
+const workerDocumentsCache = new Map();
+
+export function getCachedWorkerDocuments(workerId) {
+  return workerDocumentsCache.get(workerId) ?? null;
+}
+
+export function setCachedWorkerDocuments(workerId, data) {
+  workerDocumentsCache.set(workerId, data);
+}
+
+export function invalidateWorkerDocuments(workerId) {
+  workerDocumentsCache.delete(workerId);
+}

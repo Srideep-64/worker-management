@@ -3,7 +3,6 @@ import AppLayout from "./components/layout/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import Companies from "./pages/Companies.jsx";
 import CompanyDetail from "./pages/CompanyDetail.jsx";
 import Workers from "./pages/Workers.jsx";
 import WorkerProfile from "./pages/WorkerProfile.jsx";
@@ -19,7 +18,6 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/companies" element={<Companies />} />
           <Route path="/companies/:companyId" element={<CompanyDetail />} />
           <Route path="/workers" element={<Workers />} />
           <Route path="/workers/:workerId" element={<WorkerProfile />} />

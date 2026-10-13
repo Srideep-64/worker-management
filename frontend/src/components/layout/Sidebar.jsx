@@ -1,9 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
-  Building2,
   Users,
-  Briefcase,
   FileSpreadsheet,
   FolderLock,
   Settings as SettingsIcon,
@@ -12,7 +10,6 @@ import {
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/companies", label: "Companies", icon: Building2 },
   { to: "/workers", label: "Workers", icon: Users },
   { to: "/timesheets", label: "Timesheets", icon: FileSpreadsheet },
   { to: "/documents", label: "Documents", icon: FolderLock },

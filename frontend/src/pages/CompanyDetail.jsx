@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams,useLocation } from "react-router-dom";
 import {
   ChevronLeft,
   Users,
@@ -25,6 +25,39 @@ import {
   setMonthlyStats,
   invalidateMonthlyStats,
 } from "../utils/companyCache.js";
+
+import {
+  getCachedCompanyDetails,
+  setCachedCompanyDetails,
+  getCachedCompanyWorkers,
+  setCachedCompanyWorkers,
+} from "../utils/companyDetailCache.js";
+
+const companyDetailsCache = new Map();
+const companyWorkersCache = new Map();
+
+function getCachedRequest(cache, key, fetcher) {
+  const existing = cache.get(key);
+
+  // Reuse cached data or an in-flight request indefinitely.
+  if (existing) {
+    return existing.promise;
+  }
+
+  const entry = { promise: null };
+
+  entry.promise = Promise.resolve()
+    .then(fetcher)
+    .catch((error) => {
+      if (cache.get(key) === entry) {
+        cache.delete(key);
+      }
+      throw error;
+    });
+
+  cache.set(key, entry);
+  return entry.promise;
+}
 
 const TABS = [ "Monthly stats","Workers"];
 
@@ -165,6 +198,7 @@ const { data, error, loading } = useFetch(
               invalidateWorkerSummaries(companyId, month);
               setRefreshKey((key) => key + 1);
             }}
+            disabled={loading}
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -208,7 +242,12 @@ const { data, error, loading } = useFetch(
                   <td className="px-3 py-2.5 font-medium">
                     <Link
                       to={`/workers/${worker.id}`}
-                      className="text-accent-dark hover:underline"
+                      state={{
+                        returnTo: `/companies/${companyId}`,
+                        returnLabel: "Company Details",
+                        returnTab: "Workers",
+                      }}
+                      className="font-medium text-accent hover:underline"
                     >
                       {worker.workerCode}
                     </Link>
@@ -476,6 +515,8 @@ const {
             invalidateMonthlyStats(companyId, month);
             setRefreshKey((key) => key + 1);
           }}
+          disabled={loading}
+
         >
           <RefreshCw className="h-4 w-4" />
           Refresh
@@ -646,7 +687,11 @@ const {
 
 export default function CompanyDetail() {
   const { companyId } = useParams();
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const location = useLocation();
+
+  const [activeTab, setActiveTab] = useState(
+    location.state?.activeTab || "Monthly stats"
+  );
 
   const PAGE_SIZE = 15;
   const [workerPage, setWorkerPage] = useState(1);
@@ -668,27 +713,43 @@ export default function CompanyDetail() {
     setWorkerPage(1);
   }, [companyId]);
 
-  const {
-    data: companyData,
-    error: companyError,
-    loading: companyLoading,
-  } = useFetch(
-    () => api.get(`/companies/${companyId}`),
-    [companyId]
-  );
+    const {
+      data: companyData,
+      error: companyError,
+      loading: companyLoading,
+    } = useFetch(async () => {
+      const cached = getCachedCompanyDetails(companyId);
 
-  const {
-    data: workerData,
-    error: workerError,
-    loading: workersLoading,
-  } = useFetch(
-    () =>
-      api.get(
+      if (cached) return cached;
+
+      const data = await api.get(`/companies/${companyId}`);
+      setCachedCompanyDetails(companyId, data);
+
+      return data;
+    }, [companyId]);
+
+    const {
+      data: workerData,
+      error: workerError,
+      loading: workersLoading,
+    } = useFetch(async () => {
+      const cached = getCachedCompanyWorkers(
+        companyId,
+        workerPage,
+        PAGE_SIZE
+      );
+
+      if (cached) return cached;
+
+      const data = await api.get(
         `/workers?companyId=${encodeURIComponent(companyId)}` +
-        `&page=${workerPage}&pageSize=${PAGE_SIZE}`
-      ),
-    [companyId, workerPage]
-  );
+          `&page=${workerPage}&pageSize=${PAGE_SIZE}`
+      );
+
+      setCachedCompanyWorkers(companyId, workerPage, PAGE_SIZE, data);
+
+      return data;
+    }, [companyId, workerPage]);
 
   const company = companyData?.company || companyData;
   const workers = workerData?.workers || [];
@@ -711,11 +772,11 @@ export default function CompanyDetail() {
   return (
     <div className="space-y-4">
       <Link
-        to="/companies"
+        to="/"
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
       >
         <ChevronLeft className="h-4 w-4" />
-        Companies
+        Dashboard
       </Link>
 
       <Card
