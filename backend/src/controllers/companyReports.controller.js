@@ -98,6 +98,7 @@ export const exportCompanyMonthlyExcel = asyncHandler(
     );
 
     const headers = [
+      "S.No.",
       "Worker ID",
       "Worker Name",
       "Role",
@@ -112,7 +113,8 @@ export const exportCompanyMonthlyExcel = asyncHandler(
       "Weekly Offs",
     ];
 
-    const rows = report.workers.map((worker) => [
+    const rows = report.workers.map((worker, index) => [
+    index+1,
     worker.workerCode,
     worker.name,
     worker.role,
@@ -157,9 +159,10 @@ export const exportCompanyMonthlyExcel = asyncHandler(
     ]);
 
     worksheet["!cols"] = [
-      { wch: 16 },
-      { wch: 24 },
-      { wch: 20 },
+      { wch: 7}, // S.No
+      { wch: 16 },// Worker Id
+      { wch: 24 },// Worker Name
+      { wch: 20 },// Role
       ...Array.from(
         { length: report.daysInMonth },
         () => ({ wch: 8 })
@@ -267,14 +270,14 @@ export const exportCompanyMonthlyPdf = asyncHandler(
     // Report heading
     doc
       .font("Helvetica-Bold")
-      .fontSize(16)
+      .fontSize(17)
       .text(report.company.name, left, 26, {
         width: right - left,
       });
 
     doc
       .font("Helvetica")
-      .fontSize(9)
+      .fontSize(10)
       .text(`Company Code: ${report.company.code}`, left, 48);
 
     doc.text(`Reporting Month: ${displayMonth}`, left, 61);
@@ -285,12 +288,12 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
     doc
       .font("Helvetica-Bold")
-      .fontSize(10)
+      .fontSize(11)
       .text("Monthly Summary", left, 94);
 
     doc
       .font("Helvetica")
-      .fontSize(8)
+      .fontSize(9)
       .text(
         `Workers: ${totals.workerCount}   |   ` +
         `Hours: ${money(totals.totalHours)}   |   ` +
@@ -305,7 +308,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
     doc
       .font("Helvetica")
-      .fontSize(8)
+      .fontSize(9)
       .text(
         `Workers without payroll rates: ${totals.workersWithoutRate}`,
         left,
@@ -314,7 +317,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
     doc
       .font("Helvetica")
-      .fontSize(7)
+      .fontSize(8)
       .text(
         "Payroll totals below include workers with configured rates. " +
         "Total advances include all workers. N/A means payroll cannot be calculated.",
@@ -323,22 +326,24 @@ export const exportCompanyMonthlyPdf = asyncHandler(
         { width: right - left }
       );
 
+
     const columns = [
+      { label: "S.No.", key: "serialNumber", width: 26 },
       { label: "Worker ID", key: "workerCode", width: 58 },
       { label: "Name", key: "name", width: 85 },
-      { label: "Role", key: "role", width: 65 },
-      { label: "Hours", key: "totalHours", width: 38 },
       { label: "Worked", key: "workedDays", width: 38 },
       { label: "Absent", key: "absentDays", width: 38 },
-      { label: "Holidays", key: "holidays", width: 38 },
-      { label: "Weekly Offs", key: "weeklyOffs", width: 42 },
+      { label: "Role", key: "role", width: 55 },
       { label: "Rate (AED)", key: "hourlyRate", width: 50 },
+      { label: "Hours", key: "totalHours", width: 38 },
       { label: "Gross (AED)", key: "grossPay", width: 55 },
       { label: "Deduct. (AED)", key: "absenceDeduction", width: 55 },
       { label: "Net (AED)", key: "netPay", width: 50 },
       { label: "Advances (AED)", key: "totalAdvances", width: 55 },
       { label: "Remaining (AED)", key: "remainingPay", width: 58 },
+      { label: "S.No.", key: "serialNumberEnd", width: 26 },
     ];
+
 
     const tableWidth = columns.reduce(
       (sum, column) => sum + column.width,
@@ -352,7 +357,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
     function drawTableHeader() {
       let x = tableLeft;
 
-      doc.font("Helvetica-Bold").fontSize(6.5);
+      doc.font("Helvetica-Bold").fontSize(7);
 
       for (const column of columns) {
         doc
@@ -383,7 +388,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
       doc
         .font(bold ? "Helvetica-Bold" : "Helvetica")
-        .fontSize(7)
+        .fontSize(7.5)
         .fillColor("#111111");
 
       for (let i = 0; i < columns.length; i += 1) {
@@ -420,45 +425,49 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
     drawTableHeader();
 
-    for (const worker of report.workers) {
+    for (const [index,worker] of report.workers.entries()) {
       if (y + rowHeight > bottom - 5) {
         addTablePage();
       }
 
-      drawRow([
-        worker.workerCode,
-        worker.name,
-        worker.role,
-        money(worker.totalHours),
-        worker.workedDays,
-        worker.absentDays,
-        worker.holidays,
-        worker.weeklyOffs,
-        money(worker.hourlyRate),
-        money(worker.grossPay),
-        money(worker.absenceDeduction),
-        money(worker.netPay),
-        money(worker.totalAdvances),
-        money(worker.remainingPay),
-      ]);
+
+    drawRow([
+      index + 1,
+      worker.workerCode,
+      worker.name,
+      worker.workedDays,
+      worker.absentDays,
+      worker.role,
+      money(worker.hourlyRate),
+      money(worker.totalHours),
+      money(worker.grossPay),
+      money(worker.absenceDeduction),
+      money(worker.netPay),
+      money(worker.totalAdvances),
+      money(worker.remainingPay),
+      index + 1,
+    ]);
+
     }
 
+
     const totalsRow = [
+      "",
       "TOTAL",
+      "",
+      totals.workedDays,
+      totals.absentDays,
       "",
       "",
       money(totals.totalHours),
-      totals.workedDays,
-      totals.absentDays,
-      totals.holidays,
-      totals.weeklyOffs,
-      "",
       money(totals.grossPay),
       money(totals.absenceDeduction),
       money(totals.netPay),
       money(totals.totalAdvances),
       money(totals.remainingPay),
+      "",
     ];
+
 
     if (y + rowHeight > bottom - 5) {
       addTablePage();
@@ -483,7 +492,7 @@ export const exportCompanyMonthlyPdf = asyncHandler(
 
         doc
             .font("Helvetica")
-            .fontSize(7)
+            .fontSize(7.5)
             .fillColor("#555555")
             .text(
             `Generated: ${generatedAt}`,
