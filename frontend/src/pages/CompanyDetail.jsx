@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft, Users,   FileSpreadsheet,
-  FileText, } from "lucide-react";
+import {
+  ChevronLeft,
+  Users,
+  FileSpreadsheet,
+  FileText,
+  RefreshCw,
+} from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -10,21 +15,9 @@ import { useFetch } from "../hooks.js";
 
 const TABS = ["Workers", "Monthly stats"];
 
-function WorkersTab({ workers, companyId }) {
-  const now = new Date();
+function WorkersTab({ workers, companyId, month,setMonth}) {
 
-  // Previous calendar month by default.
-  const previousMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() - 1,
-    1
-  );
-
-  const [month, setMonth] = useState(
-    `${previousMonth.getFullYear()}-${String(
-      previousMonth.getMonth() + 1
-    ).padStart(2, "0")}`
-  );
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const { data, error, loading } = useFetch(
     async () => {
@@ -52,7 +45,7 @@ function WorkersTab({ workers, companyId }) {
 
       return results;
     },
-    [companyId, workers, month]
+    [companyId, workers, month, refreshKey]
   );
 
   const hoursByWorker = new Map(
@@ -76,17 +69,29 @@ function WorkersTab({ workers, companyId }) {
           Monthly worker attendance
         </p>
 
-        <input
-          type="month"
-          aria-label="Select month"
-          className="input w-auto"
-          value={month}
-          onChange={(event) => {
-            if (event.target.value) {
-              setMonth(event.target.value);
-            }
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="month"
+            aria-label="Select month"
+            className="input w-auto"
+            value={month}
+            onChange={(event) => {
+              if (event.target.value) {
+                setMonth(event.target.value);
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setRefreshKey((key) => key + 1)}
+            disabled={loading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -221,23 +226,11 @@ async function downloadCompanyReport(companyId, month, format, companyCode) {
 }
 
 
-function MonthlyStats({ companyId,companyCode}) {
-  const now = new Date();
-
-  const previousMonth = new Date(
-          now.getFullYear(),
-          now.getMonth() - 1,
-          1
-        );
-
-  const [month, setMonth] = useState(
-      `${previousMonth.getFullYear()}-${String(
-        previousMonth.getMonth() + 1
-      ).padStart(2, "0")}`
-  );
+function MonthlyStats({ companyId,companyCode,month,setMonth}) {
 
   const [downloading, setDownloading] = useState("");
   const [downloadError, setDownloadError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   async function handleDownload(format) {
     setDownloading(format);
@@ -260,7 +253,7 @@ function MonthlyStats({ companyId,companyCode}) {
     loading,
   } = useFetch(
     () => api.get(`/companies/${companyId}/stats?month=${month}`),
-    [companyId, month]
+    [companyId, month,refreshKey]
   );
 
   const summary = data?.summary;
@@ -320,6 +313,16 @@ function MonthlyStats({ companyId,companyCode}) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setRefreshKey((key) => key + 1)}
+            disabled={loading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+
         <button
           type="button"
           className="btn-secondary"
@@ -487,6 +490,20 @@ export default function CompanyDetail() {
   const { companyId } = useParams();
   const [activeTab, setActiveTab] = useState(TABS[0]);
 
+  const [month, setMonth] = useState(() => {
+  const now = new Date();
+
+  const previousMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() - 1,
+    1
+  );
+
+  return `${previousMonth.getFullYear()}-${String(
+    previousMonth.getMonth() + 1
+  ).padStart(2, "0")}`;
+});
+
   const { data, error, loading } = useFetch(async () => {
     const [companyResponse, workerResponse] = await Promise.all([
       api.get(`/companies/${companyId}`),
@@ -563,13 +580,23 @@ export default function CompanyDetail() {
               })}
             </div>
 
-            {activeTab === "Workers" && (
-              <WorkersTab workers={data.workers} companyId={companyId}/>
-            )}
+          <div className={activeTab === "Workers" ? "" : "hidden"}>
+            <WorkersTab
+              workers={data.workers}
+              companyId={companyId}
+              month={month}
+              setMonth={setMonth}
+            />
+          </div>
 
-            {activeTab === "Monthly stats" && (
-              <MonthlyStats companyId={companyId} companyCode={company.code}/>
-            )}
+          <div className={activeTab === "Monthly stats" ? "" : "hidden"}>
+            <MonthlyStats
+              companyId={companyId}
+              companyCode={company.code}
+              month={month}
+              setMonth={setMonth}
+            />
+          </div>
           </>
         )}
       </Card>

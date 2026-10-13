@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, Users } from "lucide-react";
+import { Plus, Search, Users, RefreshCw } from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -293,20 +293,34 @@ export default function Workers() {
     <Card
       title="Workers"
       action={
-        <button
-          type="button"
-          className="btn-accent"
-          onClick={() => setAdding(true)}
-          disabled={lookupsLoading || companies.length === 0}
-          title={
-            companies.length === 0
-              ? "Add a company before creating a worker"
-              : undefined
-          }
-        >
-          <Plus className="h-4 w-4" strokeWidth={2} />
-          Add worker
-        </button>
+        <div className="flex gap-2">
+          {/* Refresh */}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={reload}
+            disabled={loading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+
+          {/* Add Worker */}
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() => setAdding(true)}
+            disabled={lookupsLoading || companies.length === 0}
+            title={
+              companies.length === 0
+                ? "Add a company before creating a worker"
+                : undefined
+            }
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            Add worker
+          </button>
+        </div>
       }
     >
       {(lookupError || error) && (
