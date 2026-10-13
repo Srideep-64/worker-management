@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ChevronLeft,
@@ -12,41 +12,77 @@ import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import { api } from "../api/client.js";
 import { useFetch } from "../hooks.js";
+import { setCachedWork } from "../utils/workCache.js";
 
-const TABS = ["Workers", "Monthly stats"];
+import {
+  getWorkerSummary,
+  setWorkerSummary,
+  invalidateWorkerSummaries,
+} from "../utils/companyCache.js";
 
-function WorkersTab({ workers, companyId, month,setMonth}) {
+import {
+  getMonthlyStats,
+  setMonthlyStats,
+  invalidateMonthlyStats,
+} from "../utils/companyCache.js";
 
-  const [refreshKey, setRefreshKey] = useState(0);
+const TABS = [ "Monthly stats","Workers"];
 
-  const { data, error, loading } = useFetch(
-    async () => {
-      const results = await Promise.all(
-        workers.map(async (worker) => {
-          try {
-            const response = await api.get(
-              `/workers/${worker.id}/work?month=${month}`
-            );
+function WorkersTab({
+  workers,
+  companyId,
+  month,
+  setMonth,
+  page,
+  setPage,
+  hasNextPage,
+  workersLoading,
+}) {
 
-            return {
-              workerId: worker.id,
-              totalHours: response.summary?.totalHours ?? 0,
-              absentDays: response.summary?.absentDays ?? 0,
-              failed: false,
-            };
-          } catch {
-            return {
-              workerId: worker.id,
-              failed: true,
-            };
-          }
-        })
-      );
 
-      return results;
-    },
-    [companyId, workers, month, refreshKey]
-  );
+const [refreshKey, setRefreshKey] = useState(0);
+
+const { data, error, loading } = useFetch(
+  async () => {
+    const results = await Promise.all(
+      workers.map(async (worker) => {
+        const cacheKey = `${companyId}:${month}:${worker.id}`;
+        const cached = getWorkerSummary(cacheKey);
+
+        if (cached) {
+          return cached;
+        }
+
+        try {
+          const response = await api.get(
+            `/workers/${worker.id}/work?month=${month}`
+          );
+
+          setCachedWork(worker.id, month, response);
+
+          const summary = {
+            workerId: worker.id,
+            totalHours: response.summary?.totalHours ?? 0,
+            absentDays: response.summary?.absentDays ?? 0,
+            failed: false,
+          };
+
+          setWorkerSummary(cacheKey, summary);
+          return summary;
+        } catch {
+          return {
+            workerId: worker.id,
+            failed: true,
+          };
+        }
+      })
+    );
+
+    return results;
+  },
+  [companyId, workers, month, refreshKey]
+);
+
 
   const hoursByWorker = new Map(
     (data || []).map((item) => [item.workerId, item])
@@ -70,6 +106,26 @@ function WorkersTab({ workers, companyId, month,setMonth}) {
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary px-2 min-w-0"
+            aria-label="Previous month"
+            onClick={() => {
+        const [year, monthNumber] = month.split("-").map(Number);
+        const date = new Date(year, monthNumber - 2, 1);
+
+              setMonth(
+                `${date.getFullYear()}-${String(
+                  date.getMonth() + 1
+                ).padStart(2, "0")}`
+              );
+            }}
+          >
+            Previous
+          </button>
+
           <input
             type="month"
             aria-label="Select month"
@@ -84,9 +140,31 @@ function WorkersTab({ workers, companyId, month,setMonth}) {
 
           <button
             type="button"
+            className="btn-secondary px-2 min-w-0"
+            aria-label="Next month"
+            onClick={() => {
+              const [year, monthNumber] = month.split("-").map(Number);
+              const date = new Date(year, monthNumber, 1);
+
+              setMonth(
+                `${date.getFullYear()}-${String(
+                  date.getMonth() + 1
+                ).padStart(2, "0")}`
+              );
+            }}
+          >
+            Next
+          </button>
+        </div>
+
+
+          <button
+            type="button"
             className="btn-secondary"
-            onClick={() => setRefreshKey((key) => key + 1)}
-            disabled={loading}
+            onClick={() => {
+              invalidateWorkerSummaries(companyId, month);
+              setRefreshKey((key) => key + 1);
+            }}
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -164,6 +242,29 @@ function WorkersTab({ workers, companyId, month,setMonth}) {
             })}
           </tbody>
         </table>
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={page === 1 || workersLoading}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            Previous
+          </button>
+
+          <p className="text-sm text-text-muted">
+            Page {page} · {workers.length} workers shown
+          </p>
+
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!hasNextPage || workersLoading}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -247,14 +348,29 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
     }
   }
 
-  const {
-    data,
-    error,
-    loading,
-  } = useFetch(
-    () => api.get(`/companies/${companyId}/stats?month=${month}`),
-    [companyId, month,refreshKey]
-  );
+const statsCacheKey = `${companyId}:${month}`;
+
+const {
+  data,
+  error,
+  loading,
+} = useFetch(
+  async () => {
+    // Use cached data only during normal loading, not on refresh.
+    if (refreshKey === 0) {
+      const cached = getMonthlyStats(statsCacheKey);
+      if (cached) return cached;
+    }
+
+    const response = await api.get(
+      `/companies/${companyId}/stats?month=${month}`
+    );
+
+    setMonthlyStats(statsCacheKey, response);
+    return response;
+  },
+  [companyId, month, refreshKey]
+);
 
   const summary = data?.summary;
 
@@ -299,29 +415,71 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
           Reporting month
         </label>
 
-        <input
-          id="stats-month"
-          type="month"
-          className="input w-auto"
-          value={month}
-          onChange={(event) => {
-            if (event.target.value) {
-              setMonth(event.target.value);
-            }
-          }}
-        />
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary px-2 min-w-0"
+            aria-label="Previous month"
+            onClick={() => {
+              const [year, monthNumber] = month.split("-").map(Number);
+              const date = new Date(year, monthNumber - 2, 1);
+
+              setMonth(
+                `${date.getFullYear()}-${String(
+                  date.getMonth() + 1
+                ).padStart(2, "0")}`
+              );
+            }}
+          >
+            Previous
+          </button>
+
+          <input
+            type="month"
+            aria-label="Select month"
+            className="btn-secondary px-2 min-w-0"
+            value={month}
+            onChange={(event) => {
+              if (event.target.value) {
+                setMonth(event.target.value);
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            className="btn-secondary px-2 min-w-0"
+            aria-label="Next month"
+            onClick={() => {
+              const [year, monthNumber] = month.split("-").map(Number);
+              const date = new Date(year, monthNumber, 1);
+
+              setMonth(
+                `${date.getFullYear()}-${String(
+                  date.getMonth() + 1
+                ).padStart(2, "0")}`
+              );
+            }}
+          >
+            Next
+          </button>
+        </div>
+
       </div>
 
       <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setRefreshKey((key) => key + 1)}
-            disabled={loading}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
+        <button
+          type="button"
+          className="btn-secondary px-2 min-w-0 gap-1"
+          onClick={() => {
+            invalidateMonthlyStats(companyId, month);
+            setRefreshKey((key) => key + 1);
+          }}
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
 
         <button
           type="button"
@@ -490,36 +648,65 @@ export default function CompanyDetail() {
   const { companyId } = useParams();
   const [activeTab, setActiveTab] = useState(TABS[0]);
 
+  const PAGE_SIZE = 15;
+  const [workerPage, setWorkerPage] = useState(1);
+
   const [month, setMonth] = useState(() => {
-  const now = new Date();
+    const now = new Date();
+    const previousMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      1
+    );
 
-  const previousMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() - 1,
-    1
-  );
+    return `${previousMonth.getFullYear()}-${String(
+      previousMonth.getMonth() + 1
+    ).padStart(2, "0")}`;
+  });
 
-  return `${previousMonth.getFullYear()}-${String(
-    previousMonth.getMonth() + 1
-  ).padStart(2, "0")}`;
-});
-
-  const { data, error, loading } = useFetch(async () => {
-    const [companyResponse, workerResponse] = await Promise.all([
-      api.get(`/companies/${companyId}`),
-      api.get(`/workers?companyId=${encodeURIComponent(companyId)}&pageSize=100`),
-    ]);
-
-    const company = companyResponse.company || companyResponse;
-    const workers = workerResponse.workers || [];
-
-    return {
-      company,
-      workers,
-    };
+  useEffect(() => {
+    setWorkerPage(1);
   }, [companyId]);
 
-  const company = data?.company;
+  const {
+    data: companyData,
+    error: companyError,
+    loading: companyLoading,
+  } = useFetch(
+    () => api.get(`/companies/${companyId}`),
+    [companyId]
+  );
+
+  const {
+    data: workerData,
+    error: workerError,
+    loading: workersLoading,
+  } = useFetch(
+    () =>
+      api.get(
+        `/workers?companyId=${encodeURIComponent(companyId)}` +
+        `&page=${workerPage}&pageSize=${PAGE_SIZE}`
+      ),
+    [companyId, workerPage]
+  );
+
+  const company = companyData?.company || companyData;
+  const workers = workerData?.workers || [];
+
+  const pagination =
+    workerData?.pagination || workerData?.meta || {};
+
+  const totalWorkers =
+    pagination.total ??
+    workerData?.total ??
+    workerData?.totalCount;
+
+  const hasNextPage =
+    pagination.hasNextPage ??
+    workerData?.hasNextPage ??
+    (totalWorkers != null
+      ? workerPage * PAGE_SIZE < totalWorkers
+      : workers.length === PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -538,19 +725,20 @@ export default function CompanyDetail() {
             : "Company details"
         }
       >
-        {loading && (
+        {companyLoading && (
           <p className="py-6 text-center text-sm text-text-muted">
             Loading company...
           </p>
         )}
 
-        {error && (
+        {(companyError || workerError) && (
           <p role="alert" className="mb-4 text-sm text-danger">
-            {error.message || "Failed to load company details."}
+            {(companyError || workerError).message ||
+              "Failed to load company details."}
           </p>
         )}
 
-        {data && (
+        {company && (
           <>
             <div
               role="tablist"
@@ -580,23 +768,35 @@ export default function CompanyDetail() {
               })}
             </div>
 
-          <div className={activeTab === "Workers" ? "" : "hidden"}>
-            <WorkersTab
-              workers={data.workers}
-              companyId={companyId}
-              month={month}
-              setMonth={setMonth}
-            />
-          </div>
+            {activeTab === "Workers" && (
+              <>
+                {workersLoading ? (
+                  <p className="py-6 text-center text-sm text-text-muted">
+                    Loading workers...
+                  </p>
+                ) : (
+                  <WorkersTab
+                    workers={workers}
+                    companyId={companyId}
+                    month={month}
+                    setMonth={setMonth}
+                    page={workerPage}
+                    setPage={setWorkerPage}
+                    hasNextPage={hasNextPage}
+                    workersLoading={workersLoading}
+                  />
+                )}
+              </>
+            )}
 
-          <div className={activeTab === "Monthly stats" ? "" : "hidden"}>
-            <MonthlyStats
-              companyId={companyId}
-              companyCode={company.code}
-              month={month}
-              setMonth={setMonth}
-            />
-          </div>
+            {activeTab === "Monthly stats" && (
+              <MonthlyStats
+                companyId={companyId}
+                companyCode={company.code}
+                month={month}
+                setMonth={setMonth}
+              />
+            )}
           </>
         )}
       </Card>

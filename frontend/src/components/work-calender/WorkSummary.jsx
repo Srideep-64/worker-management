@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../../api/client.js";
-
+import {
+  getCachedPayroll,
+  setCachedPayroll,
+  invalidateCachedPayroll,
+} from "../../utils/profileCache.js";
 
 function Stat({ label, value, valueClassName = "text-text" }) {
   return (
@@ -17,7 +22,6 @@ function Stat({ label, value, valueClassName = "text-text" }) {
     </div>
   );
 }
-
 
 function Breakdown({ title, rows = [] }) {
   return (
@@ -71,6 +75,7 @@ export default function WorkSummary({
   summary,
   data,
   records = [],
+  refreshRef,
 }) {
   const [payroll, setPayroll] = useState(null);
   const [payrollLoading, setPayrollLoading] = useState(true);
@@ -84,33 +89,67 @@ export default function WorkSummary({
   const [advanceDate, setAdvanceDate] = useState("");
   const [advanceNote, setAdvanceNote] = useState("");
 
-  async function loadPayroll() {
-    setPayrollLoading(true);
-    setPayrollError("");
+  const loadPayroll = useCallback(
+    async ({ force = false } = {}) => {
+      if (!force) {
+        const cached = getCachedPayroll(workerId, month);
 
-    try {
-      const result = await api.get(
-        `/workers/${workerId}/payroll?month=${month}`
-      );
+        if (cached) {
+          setPayroll(cached);
+          setHourlyRate(
+            cached.hourlyRate == null
+              ? ""
+              : String(cached.hourlyRate),
+          );
+          setPayrollError("");
+          setPayrollLoading(false);
+          return;
+        }
+      }
 
-      setPayroll(result);
-      setHourlyRate(
-        result.hourlyRate == null
-          ? ""
-          : String(result.hourlyRate)
-      );
-    } catch (err) {
-      setPayrollError(
-        err?.message || "Could not load payroll information."
-      );
-    } finally {
-      setPayrollLoading(false);
-    }
-  }
+      setPayrollLoading(true);
+      setPayrollError("");
 
+      try {
+        const url = `/workers/${workerId}/payroll?month=${month}${
+          force ? `&_refresh=${Date.now()}` : ""
+        }`;
+
+        const result = await api.get(url);
+
+        setCachedPayroll(workerId, month, result);
+        setPayroll(result);
+        setHourlyRate(
+          result.hourlyRate == null
+            ? ""
+            : String(result.hourlyRate),
+        );
+      } catch (err) {
+        setPayrollError(
+          err?.message || "Could not load payroll information.",
+        );
+      } finally {
+        setPayrollLoading(false);
+      }
+    },
+    [workerId, month],
+  );
+
+  // Load payroll when the worker or month changes.
   useEffect(() => {
     loadPayroll();
-  }, [workerId, month]);
+  }, [loadPayroll]);
+
+  // Expose payroll refresh to the parent WorkCalendar.
+  useEffect(() => {
+    if (!refreshRef) return;
+
+    refreshRef.current = () => loadPayroll({ force: true });
+
+    return () => {
+      refreshRef.current = null;
+    };
+  }, [refreshRef, loadPayroll]);
 
   async function saveHourlyRate(event) {
     event.preventDefault();
@@ -131,15 +170,16 @@ export default function WorkSummary({
     setPayrollError("");
 
     try {
-      await api.patch(
-        `/workers/${workerId}/payroll/rate`,
-        { month, hourlyRate: rate }
-      );
+      await api.patch(`/workers/${workerId}/payroll/rate`, {
+        month,
+        hourlyRate: rate,
+      });
 
-      await loadPayroll();
+      invalidateCachedPayroll(workerId, month);
+      await loadPayroll({ force: true });
     } catch (err) {
       setPayrollError(
-        err?.message || "Could not save the hourly rate."
+        err?.message || "Could not save the hourly rate.",
       );
     } finally {
       setSavingRate(false);
@@ -169,7 +209,11 @@ export default function WorkSummary({
         payrollMonth: month,
         amount,
         ...(advanceDate
-          ? { paidAt: new Date(`${advanceDate}T12:00:00`).toISOString() }
+          ? {
+              paidAt: new Date(
+                `${advanceDate}T12:00:00`,
+              ).toISOString(),
+            }
           : {}),
         ...(advanceNote.trim()
           ? { note: advanceNote.trim() }
@@ -180,10 +224,11 @@ export default function WorkSummary({
       setAdvanceDate("");
       setAdvanceNote("");
 
-      await loadPayroll();
+      invalidateCachedPayroll(workerId, month);
+      await loadPayroll({ force: true });
     } catch (err) {
       setPayrollError(
-        err?.message || "Could not add the advance payment."
+        err?.message || "Could not add the advance payment.",
       );
     } finally {
       setAddingAdvance(false);
@@ -198,13 +243,14 @@ export default function WorkSummary({
 
     try {
       await api.delete(
-        `/workers/${workerId}/advances/${advanceId}`
+        `/workers/${workerId}/advances/${advanceId}`,
       );
 
-      await loadPayroll();
+      invalidateCachedPayroll(workerId, month);
+      await loadPayroll({ force: true });
     } catch (err) {
       setPayrollError(
-        err?.message || "Could not delete the advance payment."
+        err?.message || "Could not delete the advance payment.",
       );
     } finally {
       setDeletingAdvanceId("");
@@ -227,7 +273,7 @@ export default function WorkSummary({
 
   return (
     <div className="space-y-6 border-t border-border pt-4">
-      {/* Existing work summary */}
+      {/* Work summary */}
       {hasWorkSummary && (
         <section className="space-y-4">
           <h3 className="text-sm font-semibold text-text">
@@ -242,10 +288,7 @@ export default function WorkSummary({
             <Stat label="Weekly offs" value={summary.weeklyOffs} />
           </div>
 
-          <Breakdown
-            title="Hours by role"
-            rows={summary.byRole}
-          />
+          <Breakdown title="Hours by role" rows={summary.byRole} />
 
           {data?.activeUpload?.originalFilename && (
             <p className="text-xs text-text-muted">
@@ -262,8 +305,8 @@ export default function WorkSummary({
             Payroll Summary
           </h3>
           <p className="mt-1 text-xs text-text-muted">
-            Pay calculation for {month}. Hourly rate is saved separately
-            for this worker and month.
+            Pay calculation for {month}. Hourly rate is saved
+            separately for this worker and month.
           </p>
         </div>
 
@@ -314,7 +357,7 @@ export default function WorkSummary({
             {!rateIsSet && (
               <p className="text-sm text-text-muted">
                 Enter and save an hourly rate to calculate this
-                worker's pay.
+                worker&apos;s pay.
               </p>
             )}
 
@@ -348,22 +391,23 @@ export default function WorkSummary({
                 value={money(totalAdvances)}
               />
 
-
-                <Stat
-                  label="Remaining pay"
-                  value={rateIsSet ? money(remainingPay) : "Set hourly rate"}
-                  valueClassName={
-                    rateIsSet && Number(remainingPay.toFixed(2)) === 0
-                      ? "text-green-600"
-                      : "text-text"
-                  }
-                />
-
+              <Stat
+                label="Remaining pay"
+                value={
+                  rateIsSet ? money(remainingPay) : "Set hourly rate"
+                }
+                valueClassName={
+                  rateIsSet &&
+                  Number(remainingPay.toFixed(2)) === 0
+                    ? "text-green-600"
+                    : "text-text"
+                }
+              />
             </div>
 
             <p className="text-xs text-text-muted">
-              Absence deduction: AED 25 for each absence after the
-              first two absences in the selected month.
+              Absence deduction: AED 25 for each absence after
+              the first two absences in the selected month.
             </p>
 
             {/* Advance payment history */}
@@ -392,9 +436,9 @@ export default function WorkSummary({
                           {formatDate(advance.paidAt)}
                           {advance.note ? ` · ${advance.note}` : ""}
                         </p>
-
                         <p className="text-xs text-text-muted">
-                          Recorded by: {advance.createdByName || "Unknown user"}
+                          Recorded by:{" "}
+                          {advance.createdByName || "Unknown user"}
                         </p>
                       </div>
 
@@ -417,7 +461,10 @@ export default function WorkSummary({
                 </p>
               )}
 
-              <form onSubmit={addAdvance} className="space-y-3 border-t border-border pt-3">
+              <form
+                onSubmit={addAdvance}
+                className="space-y-3 border-t border-border pt-3"
+              >
                 <p className="text-sm font-medium text-text">
                   Add an advance
                 </p>

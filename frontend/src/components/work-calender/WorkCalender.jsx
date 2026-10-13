@@ -1,6 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight,RefreshCw } from "lucide-react";
 
 import Badge from "../ui/Badge.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
@@ -11,6 +11,18 @@ import WorkCalendarGrid from "./WorkCalendarGrid.jsx";
 import WorkEntryForm from "./WorkEntryForm.jsx";
 import ConfirmWorkChange from "./ConfirmWorkChange.jsx";
 import WorkSummary from "./WorkSummary.jsx";
+
+import {
+  getCachedWork,
+  setCachedWork,
+  invalidateCachedWork,
+} from "../../utils/workCache.js";
+
+import {
+  getCachedRoles,
+  setCachedRoles,
+  invalidateCachedPayroll,
+} from "../../utils/profileCache.js";
 
 import {
   STATUS_FROM_KEY,
@@ -40,6 +52,8 @@ export default function WorkCalendar({ workerId }) {
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pendingEdit, setPendingEdit] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshPayrollRef = useRef(null);
 
   const entryInputRef = useRef(null);
   const shouldFocusEntryRef = useRef(false);
@@ -47,20 +61,35 @@ export default function WorkCalendar({ workerId }) {
 
   const month = monthKey(ym.y, ym.m);
 
-  const {
-    data,
-    error,
-    loading,
-    reload,
-  } = useFetch(
-    () => api.get(`/workers/${workerId}/work?month=${month}`),
+  const { data, error, loading, reload } = useFetch(
+    async () => {
+      const cached = getCachedWork(workerId, month);
+
+      if (cached) return cached;
+
+      const response = await api.get(
+        `/workers/${workerId}/work?month=${month}`
+      );
+
+      setCachedWork(workerId, month, response);
+      return response;
+    },
     [workerId, month],
   );
 
   const {
     data: rolesData,
     error: rolesError,
-  } = useFetch(() => api.get("/roles"), []);
+  } = useFetch(async () => {
+    const cached = getCachedRoles();
+
+    if (cached) return cached;
+
+    const response = await api.get("/roles");
+    setCachedRoles(response);
+
+    return response;
+  }, []);
 
   const roles = rolesData?.roles ?? [];
   const records = data?.records ?? [];
@@ -353,31 +382,32 @@ export default function WorkCalendar({ workerId }) {
     setSaving(true);
     setSaveError("");
 
-      try {
-        await api.post(`/workers/${workerId}/work`, {
-          workDate: selected,
-          roleId: selectedRoleId,
-          status: next.status,
-          ...(next.status === "WORKED"
-            ? { hours: next.hours }
-            : {}),
-        });
+    try {
+      await api.post(`/workers/${workerId}/work`, {
+        workDate: selected,
+        roleId: selectedRoleId,
+        status: next.status,
+        ...(next.status === "WORKED"
+          ? { hours: next.hours }
+          : {}),
+      });
 
-        setEntryValue("");
-        setSaveError("");
-        
-        shouldFocusEntryRef.current = true;
-        // Move to the next date after a successful save.
-        navigateDate(1);
+      invalidateCachedWork(workerId, month);
+      await reload();
 
-        await reload();
-      } catch (err) {
-        setSaveError(
-          err?.message || "Could not save this work record.",
-        );
-      } finally {
-        setSaving(false);
-      }
+      setEntryValue("");
+      setSaveError("");
+
+      shouldFocusEntryRef.current = true;
+      navigateDate(1);
+    } catch (err) {
+      setSaveError(
+        err?.message || "Could not save this work record.",
+      );
+    } finally {
+      setSaving(false);
+    }
+
   }
 
   async function confirmEdit() {
@@ -392,6 +422,9 @@ export default function WorkCalendar({ workerId }) {
         pendingEdit.payload,
       );
 
+      invalidateCachedWork(workerId, month);
+      await reload();
+
       setPendingEdit(null);
       setEntryValue("");
       setSaveError("");
@@ -399,7 +432,6 @@ export default function WorkCalendar({ workerId }) {
       shouldFocusEntryRef.current = true;
       navigateDate(1);
 
-      await reload();
     } catch (err) {
       setSaveError(
         err?.message || "Could not update this work record.",
@@ -437,10 +469,40 @@ export default function WorkCalendar({ workerId }) {
       })
     : "Select a date";
 
+  async function handleRefresh() {
+      if (refreshing) return;
+
+      setRefreshing(true);
+
+      invalidateCachedWork(workerId, month);
+      invalidateCachedPayroll(workerId, month);
+
+      try {
+        await Promise.all([
+          reload(),
+          refreshPayrollRef.current?.(),
+        ]);
+      } finally {
+        setRefreshing(false);
+      }
+    }
+
   return (
     <div className="space-y-5">
       {/* Month navigation and status legend */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          className="btn-secondary inline-flex items-center gap-2"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh work records and payroll"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+          />
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
         <div className="flex items-center gap-2">
           <button
             type="button"
