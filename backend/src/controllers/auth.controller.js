@@ -11,7 +11,7 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_EXPIRES_IN default
+const COOKIE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours, matches JWT_EXPIRES_IN default
 
 function cookieOptions() {
   return {
