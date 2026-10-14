@@ -1,10 +1,41 @@
-
 import { prisma } from "../lib/prisma.js";
 import { monthRange } from "./dates.js";
 import { ApiError } from "./ApiError.js";
 
-// Uses the project's existing monthRange helper.
-// If that helper lives elsewhere, adjust the import above.
+// Converts a date to YYYY-MM-DD for date-only comparisons.
+function dateOnly(value) {
+  if (!value) return null;
+
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function getWorkerStatusForMonth(worker, month) {
+  const [year, monthNumber] = month.split("-").map(Number);
+
+  const selectedMonthStart =
+    `${year}-${String(monthNumber).padStart(2, "0")}-01`;
+
+  const nextMonthStart = new Date(
+    Date.UTC(year, monthNumber, 1)
+  )
+    .toISOString()
+    .slice(0, 10);
+
+  const joiningDate = dateOnly(worker.joiningDate);
+  const leavingDate = dateOnly(worker.leavingDate);
+
+  // Inactive before the worker's joining month.
+  if (joiningDate && joiningDate >= nextMonthStart) {
+    return "INACTIVE";
+  }
+
+  // Inactive only from the month AFTER the leaving month.
+  if (leavingDate && leavingDate < selectedMonthStart) {
+    return "INACTIVE";
+  }
+
+  return "ACTIVE";
+}
 
 export async function getCompanyMonthlyReport(companyId, month) {
   const { start, end } = monthRange(month);
@@ -18,23 +49,15 @@ export async function getCompanyMonthlyReport(companyId, month) {
     },
   });
 
-if (!company) {
-  throw ApiError.notFound("Company not found");
-}
+  if (!company) {
+    throw ApiError.notFound("Company not found");
+  }
 
+  // Fetch all workers belonging to the company.
+  // Do not filter by attendance or a nonexistent isActive field.
   const workers = await prisma.worker.findMany({
     where: {
       companyId,
-      OR: [
-        { isActive: true },
-        {
-          workRecords: {
-            some: {
-              workDate: { gte: start, lt: end },
-            },
-          },
-        },
-      ],
     },
     orderBy: { workerCode: "asc" },
     select: {
@@ -42,6 +65,9 @@ if (!company) {
       workerCode: true,
       name: true,
       jobTitle: true,
+      joiningDate: true,
+      leavingDate: true,
+
       workRecords: {
         where: {
           workDate: { gte: start, lt: end },
@@ -52,20 +78,31 @@ if (!company) {
           status: true,
           hours: true,
           role: {
-            select: { code: true, name: true },
+            select: {
+              code: true,
+              name: true,
+            },
           },
         },
       },
+
       payrolls: {
         where: { payrollMonth: start },
         select: { hourlyRate: true },
       },
+
       advancePayments: {
         where: { payrollMonth: start },
         select: { amount: true },
       },
     },
   });
+
+  // Include workers classified as either ACTIVE or INACTIVE.
+  // Attendance does not determine whether a worker is included.
+const reportWorkersSource = workers.filter((worker) => {
+  return getWorkerStatusForMonth(worker, month) === "ACTIVE";
+});
 
   const daysInMonth = new Date(
     Date.UTC(
@@ -78,7 +115,7 @@ if (!company) {
   const money = (value) =>
     Math.round((value + Number.EPSILON) * 100) / 100;
 
-  const reportWorkers = workers.map((worker) => {
+  const reportWorkers = reportWorkersSource.map((worker) => {
     const recordByDay = new Map(
       worker.workRecords.map((record) => [
         new Date(record.workDate).getUTCDate(),
@@ -199,31 +236,32 @@ if (!company) {
     daysInMonth,
     generatedAt: new Date(),
     workers: reportWorkers,
+
     totals: {
-        workerCount: reportWorkers.length,
-        totalHours: sum("totalHours"),
-        workedDays: sum("workedDays"),
-        absentDays: sum("absentDays"),
-        holidays: sum("holidays"),
-        weeklyOffs: sum("weeklyOffs"),
+      workerCount: reportWorkers.length,
+      totalHours: sum("totalHours"),
+      workedDays: sum("workedDays"),
+      absentDays: sum("absentDays"),
+      holidays: sum("holidays"),
+      weeklyOffs: sum("weeklyOffs"),
 
-        workersWithRate: reportWorkers.filter(
-            (worker) => worker.hourlyRate !== null
-        ).length,
+      workersWithRate: reportWorkers.filter(
+        (worker) => worker.hourlyRate !== null
+      ).length,
 
-        workersWithoutRate: reportWorkers.filter(
-            (worker) => worker.hourlyRate === null
-        ).length,
+      workersWithoutRate: reportWorkers.filter(
+        (worker) => worker.hourlyRate === null
+      ).length,
 
-        grossPay: sum("grossPay"),
-        absenceDeduction: sum("absenceDeduction"),
-        netPay: sum("netPay"),
+      grossPay: sum("grossPay"),
+      absenceDeduction: sum("absenceDeduction"),
+      netPay: sum("netPay"),
 
-        // Includes advances for every worker, even if their rate is missing.
-        totalAdvances: sum("totalAdvances"),
+      // Includes advances for every worker, even without an hourly rate.
+      totalAdvances: sum("totalAdvances"),
 
-        // Only sum remaining pay where it can actually be calculated.
-        remainingPay: sum("remainingPay"),
-        },
+      // Only sums remaining pay where it can be calculated.
+      remainingPay: sum("remainingPay"),
+    },
   };
 }
