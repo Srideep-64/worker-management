@@ -38,7 +38,19 @@ export const getCompanyReportChecks = asyncHandler(async (req, res) => {
   const { start, end } = monthRange(month);
 
   const workers = await prisma.worker.findMany({
-    where: { companyId: company.id },
+    where: {
+        companyId: company.id,
+        OR: [
+          { isActive: true },
+          {
+            workRecords: {
+              some: {
+                workDate: { gte: start, lt: end },
+              },
+            },
+          },
+        ],
+      },
     orderBy: { workerCode: "asc" },
     select: {
       id: true,

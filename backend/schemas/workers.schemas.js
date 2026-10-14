@@ -8,8 +8,8 @@ const dateStr = z
 export const listWorkersQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
   companyId: z.string().uuid().optional(),
-  clientId: z.string().uuid().optional(),
   roleId: z.string().uuid().optional(),
+  status: z.enum(["ACTIVE", "INACTIVE", "ALL"]).default("ACTIVE"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });

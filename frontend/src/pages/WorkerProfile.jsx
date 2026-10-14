@@ -16,6 +16,8 @@ import {
   invalidateWorkerProfile,
 } from "../utils/profileCache.js";
 
+import { invalidateCompanyWorkers } from "../utils/companyDetailCache.js";
+
 function Field({ label, value }) {
   return (
     <div>
@@ -204,6 +206,7 @@ export default function WorkerProfile() {
           onSaved={() => {
             setEditing(false);
             invalidateWorkerProfile(workerId)
+            invalidateCompanyWorkers(worker.companyId);
             reload();
           }}
         />

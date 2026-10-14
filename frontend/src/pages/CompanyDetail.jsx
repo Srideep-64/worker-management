@@ -31,45 +31,25 @@ import {
   setCachedCompanyDetails,
   getCachedCompanyWorkers,
   setCachedCompanyWorkers,
+  invalidateCompanyDetails,
+  invalidateCompanyWorkers,
 } from "../utils/companyDetailCache.js";
 
-const companyDetailsCache = new Map();
-const companyWorkersCache = new Map();
-
-function getCachedRequest(cache, key, fetcher) {
-  const existing = cache.get(key);
-
-  // Reuse cached data or an in-flight request indefinitely.
-  if (existing) {
-    return existing.promise;
-  }
-
-  const entry = { promise: null };
-
-  entry.promise = Promise.resolve()
-    .then(fetcher)
-    .catch((error) => {
-      if (cache.get(key) === entry) {
-        cache.delete(key);
-      }
-      throw error;
-    });
-
-  cache.set(key, entry);
-  return entry.promise;
-}
 
 const TABS = [ "Monthly stats","Workers"];
 
 function WorkersTab({
   workers,
   companyId,
+  workerStatus,
+  setWorkerStatus,
   month,
   setMonth,
   page,
   setPage,
   hasNextPage,
   workersLoading,
+  setWorkersRefreshKey
 }) {
 
 
@@ -121,15 +101,7 @@ const { data, error, loading } = useFetch(
     (data || []).map((item) => [item.workerId, item])
   );
 
-  if (workers.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title="No workers in this company yet"
-        description="Workers assigned to this company will appear here."
-      />
-    );
-  }
+
 
   return (
     <div className="space-y-4">
@@ -137,6 +109,19 @@ const { data, error, loading } = useFetch(
         <p className="text-sm font-medium text-text">
           Monthly worker attendance
         </p>
+        <select
+          aria-label="Filter workers by status"
+          className="input w-auto"
+          value={workerStatus}
+          onChange={(event) => {
+            setWorkerStatus(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="ACTIVE">Active workers</option>
+          <option value="INACTIVE">Inactive workers</option>
+          <option value="ALL">All workers</option>
+        </select>
 
         <div className="flex flex-wrap items-center gap-2">
 
@@ -196,7 +181,9 @@ const { data, error, loading } = useFetch(
             className="btn-secondary"
             onClick={() => {
               invalidateWorkerSummaries(companyId, month);
+              invalidateCompanyWorkers(companyId);
               setRefreshKey((key) => key + 1);
+              setWorkersRefreshKey((key) => key + 1);
             }}
             disabled={loading}
           >
@@ -211,76 +198,91 @@ const { data, error, loading } = useFetch(
           {error.message || "Unable to load worker statistics."}
         </p>
       )}
-
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-              <th className="px-3 py-2 font-medium">Worker ID</th>
-              <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Job title</th>
-              <th className="px-3 py-2 font-medium">
-                Work hours
-              </th>
-              <th className="px-3 py-2 font-medium">
-                Absent days
-              </th>
-            </tr>
-          </thead>
+        {workers.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title={
+              workerStatus === "INACTIVE"
+                ? "No inactive workers"
+                : workerStatus === "ACTIVE"
+                  ? "No active workers"
+                  : "No workers in this company"
+            }
+            description={
+              workerStatus === "INACTIVE"
+                ? "This company has no inactive workers matching the current filter."
+                : workerStatus === "ACTIVE"
+                  ? "There are no active workers on this company page."
+                  : "Workers assigned to this company will appear here."
+            }
+          />
+        ) : (
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
+                <th className="px-3 py-2 font-medium">Worker ID</th>
+                <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Job title</th>
+                <th className="px-3 py-2 font-medium">Work hours</th>
+                <th className="px-3 py-2 font-medium">Absent days</th>
+              </tr>
+            </thead>
 
-          <tbody>
-            {workers.map((worker) => {
-              const stats = hoursByWorker.get(worker.id);
+            <tbody>
+              {workers.map((worker) => {
+                const stats = hoursByWorker.get(worker.id);
+                const unavailable = stats?.failed;
 
-              const unavailable = stats?.failed;
+                return (
+                  <tr
+                    key={worker.id}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="px-3 py-2.5 font-medium">
+                      <Link
+                        to={`/workers/${worker.id}`}
+                        state={{
+                          returnTo: `/companies/${companyId}`,
+                          returnLabel: "Company Details",
+                          returnTab: "Workers",
+                        }}
+                        className="font-medium text-accent hover:underline"
+                      >
+                        {worker.workerCode}
+                      </Link>
+                    </td>
 
-              return (
-                <tr
-                  key={worker.id}
-                  className="border-b border-border last:border-0"
-                >
-                  <td className="px-3 py-2.5 font-medium">
-                    <Link
-                      to={`/workers/${worker.id}`}
-                      state={{
-                        returnTo: `/companies/${companyId}`,
-                        returnLabel: "Company Details",
-                        returnTab: "Workers",
-                      }}
-                      className="font-medium text-accent hover:underline"
-                    >
-                      {worker.workerCode}
-                    </Link>
-                  </td>
+                    <td className="px-3 py-2.5 text-text">
+                      {worker.name}
+                    </td>
 
-                  <td className="px-3 py-2.5 text-text">
-                    {worker.name}
-                  </td>
+                    <td className="px-3 py-2.5 text-text-muted">
+                      {worker.jobTitle || "—"}
+                    </td>
 
-                  <td className="px-3 py-2.5 text-text-muted">
-                    {worker.jobTitle || "—"}
-                  </td>
+                    <td className="px-3 py-2.5 tabular-nums text-text-muted">
+                      {loading
+                        ? "..."
+                        : unavailable
+                          ? "—"
+                          : `${stats?.totalHours ?? 0} h`}
+                    </td>
 
-                  <td className="px-3 py-2.5 tabular-nums text-text-muted">
-                    {loading
-                      ? "..."
-                      : unavailable
-                        ? "—"
-                        : `${stats?.totalHours ?? 0} h`}
-                  </td>
+                    <td className="px-3 py-2.5 tabular-nums text-text-muted">
+                      {loading
+                        ? "..."
+                        : unavailable
+                          ? "—"
+                          : stats?.absentDays ?? 0}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
 
-                  <td className="px-3 py-2.5 tabular-nums text-text-muted">
-                    {loading
-                      ? "..."
-                      : unavailable
-                        ? "—"
-                        : stats?.absentDays ?? 0}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
         <div className="mt-4 flex items-center justify-between gap-3">
           <button
             type="button"
@@ -298,13 +300,14 @@ const { data, error, loading } = useFetch(
           <button
             type="button"
             className="btn-secondary"
-            disabled={!hasNextPage || workersLoading}
+            disabled={!hasNextPage || workersLoading || workers.length === 0}
             onClick={() => setPage((current) => current + 1)}
           >
             Next
           </button>
         </div>
       </div>
+
     </div>
   );
 }
@@ -695,6 +698,8 @@ export default function CompanyDetail() {
 
   const PAGE_SIZE = 15;
   const [workerPage, setWorkerPage] = useState(1);
+  const [workersRefreshKey, setWorkersRefreshKey] = useState(0);
+  const [workerStatus, setWorkerStatus] = useState("ACTIVE");
 
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -711,7 +716,7 @@ export default function CompanyDetail() {
 
   useEffect(() => {
     setWorkerPage(1);
-  }, [companyId]);
+  }, [companyId,workerStatus]);
 
     const {
       data: companyData,
@@ -736,20 +741,33 @@ export default function CompanyDetail() {
       const cached = getCachedCompanyWorkers(
         companyId,
         workerPage,
-        PAGE_SIZE
+        PAGE_SIZE,
+        workerStatus
       );
 
       if (cached) return cached;
 
       const data = await api.get(
         `/workers?companyId=${encodeURIComponent(companyId)}` +
+          `&status=${workerStatus}` +
           `&page=${workerPage}&pageSize=${PAGE_SIZE}`
       );
 
-      setCachedCompanyWorkers(companyId, workerPage, PAGE_SIZE, data);
+      setCachedCompanyWorkers(
+        companyId,
+        workerPage,
+        PAGE_SIZE,
+        data,
+        workerStatus
+      );
 
       return data;
-    }, [companyId, workerPage]);
+    }, [
+      companyId,
+      workerPage,
+      workersRefreshKey,
+      workerStatus,
+    ]);
 
   const company = companyData?.company || companyData;
   const workers = workerData?.workers || [];
@@ -838,6 +856,8 @@ export default function CompanyDetail() {
                 ) : (
                   <WorkersTab
                     workers={workers}
+                    workerStatus={workerStatus}
+                    setWorkerStatus={setWorkerStatus}
                     companyId={companyId}
                     month={month}
                     setMonth={setMonth}
@@ -845,6 +865,7 @@ export default function CompanyDetail() {
                     setPage={setWorkerPage}
                     hasNextPage={hasNextPage}
                     workersLoading={workersLoading}
+                    setWorkersRefreshKey={setWorkersRefreshKey}
                   />
                 )}
               </>

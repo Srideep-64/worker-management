@@ -175,6 +175,16 @@ if (missingDays.length > 0) {
       return;
     }
 
+    if (!worker.isActive) {
+      errors.push({
+        sheet: "Sheet1",
+        row: rowNum,
+        field: "WORKER_ID",
+        message: `Worker "${workerCode}" is inactive and cannot be included in a new timesheet`,
+      });
+      return;
+    }
+
     if (!baseRoleCode) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "ROLE", message: "Missing role" });
       return;
@@ -310,6 +320,16 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, rolesByCode }) {
     const worker = workersByCode[workerCode];
     if (!worker) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: `Unknown worker ID "${workerCode}" for this company` });
+      return;
+    }
+
+    if (!worker.isActive) {
+      errors.push({
+        sheet: "Sheet1",
+        row: rowNum,
+        field: "WORKER_ID",
+        message: `Worker "${workerCode}" is inactive and cannot be included in a new timesheet`,
+      });
       return;
     }
 

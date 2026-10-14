@@ -29,20 +29,28 @@ export const createWorkerSchema = z.object({
 // companyId is intentionally excluded from updates: "a worker permanently
 // belongs to exactly one company" per spec, so moving a worker between
 // companies isn't a supported operation for v1.
-export const updateWorkerSchema = createWorkerSchema.omit({ companyId: true, workerCode: true }).partial();
+export const updateWorkerSchema = createWorkerSchema
+  .omit({ companyId: true, workerCode: true })
+  .extend({
+    isActive: z.boolean().optional(),
+  })
+  .partial();
 
 export const listWorkersQuerySchema = z.object({
   search: z.string().trim().optional(), // matches worker_code or name
   companyId: z.string().uuid().optional(),
+  status: z.enum(["ACTIVE", "INACTIVE", "ALL"]).default("ACTIVE"),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(25),
 });
 
 export const listWorkers = asyncHandler(async (req, res) => {
-  const { search, companyId, page, pageSize } = req.query;
+  const { search, companyId, page, pageSize, status = "ACTIVE" } = req.query;
 
   const where = {
     ...(companyId ? { companyId } : {}),
+    ...(status === "ACTIVE" ? { isActive: true } : {}),
+    ...(status === "INACTIVE" ? { isActive: false } : {}),
     ...(search
       ? {
           OR: [
@@ -65,6 +73,7 @@ export const listWorkers = asyncHandler(async (req, res) => {
         name: true,
         jobTitle: true,
         nationality: true,
+        isActive:true,
         company: {
           select: { id: true, code: true, name: true },
         },
@@ -83,6 +92,34 @@ export const listWorkers = asyncHandler(async (req, res) => {
     },
   });
 })
+
+export const updateWorkerStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+export const updateWorkerStatus = asyncHandler(async (req, res) => {
+  const worker = await prisma.worker.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+
+  if (!worker) {
+    throw ApiError.notFound("Worker not found");
+  }
+
+  const updatedWorker = await prisma.worker.update({
+    where: { id: req.params.id },
+    data: { isActive: req.body.isActive },
+    select: {
+      id: true,
+      workerCode: true,
+      name: true,
+      isActive: true,
+    },
+  });
+
+  res.json({ worker: updatedWorker });
+});
 
 export const getWorker = asyncHandler(async (req, res) => {
   const worker = await prisma.worker.findUnique({

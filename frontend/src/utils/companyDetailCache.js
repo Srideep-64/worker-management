@@ -18,15 +18,25 @@ export function invalidateCompanyDetails(companyId) {
   }
 }
 
-// Paginated workers list
-function getWorkersCacheKey(companyId, page, pageSize) {
-  return `${companyId}:${page}:${pageSize}`;
+// Paginated workers list, cached separately for each status filter.
+function getWorkersCacheKey(
+  companyId,
+  page,
+  pageSize,
+  status = "ACTIVE"
+) {
+  return `${companyId}:${status}:${page}:${pageSize}`;
 }
 
-export function getCachedCompanyWorkers(companyId, page, pageSize) {
+export function getCachedCompanyWorkers(
+  companyId,
+  page,
+  pageSize,
+  status = "ACTIVE"
+) {
   return (
     companyWorkersCache.get(
-      getWorkersCacheKey(companyId, page, pageSize)
+      getWorkersCacheKey(companyId, page, pageSize, status)
     ) ?? null
   );
 }
@@ -35,10 +45,11 @@ export function setCachedCompanyWorkers(
   companyId,
   page,
   pageSize,
-  data
+  data,
+  status = "ACTIVE"
 ) {
   companyWorkersCache.set(
-    getWorkersCacheKey(companyId, page, pageSize),
+    getWorkersCacheKey(companyId, page, pageSize, status),
     data
   );
 }
@@ -58,7 +69,7 @@ export function invalidateCompanyWorkers(companyId) {
   }
 }
 
-// Invalidate both caches for one company
+// Invalidate both caches for one company.
 export function invalidateCompanyDetailCache(companyId) {
   invalidateCompanyDetails(companyId);
   invalidateCompanyWorkers(companyId);

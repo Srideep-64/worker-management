@@ -23,7 +23,19 @@ if (!company) {
 }
 
   const workers = await prisma.worker.findMany({
-    where: { companyId },
+    where: {
+      companyId,
+      OR: [
+        { isActive: true },
+        {
+          workRecords: {
+            some: {
+              workDate: { gte: start, lt: end },
+            },
+          },
+        },
+      ],
+    },
     orderBy: { workerCode: "asc" },
     select: {
       id: true,

@@ -244,6 +244,7 @@ function AddWorkerModal({ companies, onClose, onSaved }) {
 export default function Workers() {
   const [search, setSearch] = useState("");
   const [companyId, setCompanyId] = useState("");
+  const [status, setStatus] = useState("ACTIVE");
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
 
@@ -274,6 +275,7 @@ export default function Workers() {
   const workerCacheKey = JSON.stringify({
     search: debouncedSearch.trim(),
     companyId,
+    status,
     page,
     pageSize: PAGE_SIZE,
   });
@@ -292,6 +294,7 @@ export default function Workers() {
       `/workers${qs({
         search: debouncedSearch.trim() || undefined,
         companyId: companyId || undefined,
+        status,
         page,
         pageSize: PAGE_SIZE,
       })}`,
@@ -423,6 +426,18 @@ export default function Workers() {
               {company.code}
             </option>
           ))}
+        </select>
+        <select
+          className="input w-auto"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="ACTIVE">Active workers</option>
+          <option value="INACTIVE">Inactive workers</option>
+          <option value="ALL">All workers</option>
         </select>
       </div>
 

@@ -28,7 +28,7 @@ function periodMonthToDate(str) {
 }
 
 // Loads everything the parser needs to resolve business identifiers
-// (worker_code, client code, role code) to database IDs, scoped so a
+// (worker_code, role code) to database IDs, scoped so a
 // worker from a different company can never silently match by code.
 async function loadValidationContext(companyId) {
   const [workers, roles] = await Promise.all([
@@ -38,6 +38,7 @@ async function loadValidationContext(companyId) {
         id: true,
         workerCode: true,
         name: true,
+        isActive:true,
       },
     }),
 

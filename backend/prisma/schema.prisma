@@ -14,9 +14,9 @@ model User {
   passwordHash       String            @map("password_hash")
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
+  recordedAdvances   AdvancePayment[]  @relation("AdvancePaymentCreatedBy")
   uploadedDocuments  Document[]        @relation("DocumentUploadedBy")
   uploadedTimesheets TimesheetUpload[] @relation("TimesheetUploadedBy")
-  recordedAdvances   AdvancePayment[]  @relation("AdvancePaymentCreatedBy")
 
   @@map("users")
 }
@@ -58,13 +58,14 @@ model Worker {
   labourCardNumber String?          @map("labour_card_number")
   jobTitle         String?          @map("job_title")
   joiningDate      DateTime?        @map("joining_date") @db.Date
+  isActive Boolean @default(true) @map("is_active")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
+  advancePayments  AdvancePayment[]
   documents        Document[]
   workRecords      WorkRecord[]
-  company          Company          @relation(fields: [companyId], references: [id])
-  advancePayments  AdvancePayment[]
   payrolls         WorkerPayroll[]
+  company          Company          @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@index([name])
@@ -117,10 +118,9 @@ model WorkRecord {
   uploadId  String?          @map("upload_id")
   createdAt DateTime         @default(now()) @map("created_at")
   source    WorkRecordSource @default(TIMESHEET)
-
-  role   Role             @relation(fields: [roleId], references: [id])
-  upload TimesheetUpload? @relation(fields: [uploadId], references: [id])
-  worker Worker           @relation(fields: [workerId], references: [id])
+  role      Role             @relation(fields: [roleId], references: [id])
+  upload    TimesheetUpload? @relation(fields: [uploadId], references: [id])
+  worker    Worker           @relation(fields: [workerId], references: [id])
 
   @@unique([workerId, workDate])
   @@index([uploadId])
@@ -136,9 +136,8 @@ model AdvancePayment {
   note         String?
   createdAt    DateTime @default(now()) @map("created_at")
   createdById  String?  @map("created_by_id")
-
-  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("AdvancePaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy    User?    @relation("AdvancePaymentCreatedBy", fields: [createdById], references: [id])
+  worker       Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   @@index([workerId, payrollMonth])
   @@map("advance_payments")
@@ -151,8 +150,7 @@ model WorkerPayroll {
   hourlyRate   Decimal  @map("hourly_rate") @db.Decimal(10, 2)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-
-  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  worker       Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
 
   @@unique([workerId, payrollMonth])
   @@map("worker_payrolls")
