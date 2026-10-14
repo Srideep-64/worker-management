@@ -25,6 +25,11 @@ import {
 } from "../../utils/profileCache.js";
 
 import {
+  invalidateWorkerSummaries,
+  invalidateMonthlyStats,
+} from "../../utils/companyCache.js";
+
+import {
   STATUS_FROM_KEY,
   monthKey,
   dateKey,
@@ -33,7 +38,7 @@ import {
   pad,
 } from "./workCalendarUtils.js";
 
-export default function WorkCalendar({ workerId }) {
+export default function WorkCalendar({ workerId, companyId }) {
   const today = dateKey(new Date());
 
   const [ym, setYm] = useState(() => {
@@ -60,6 +65,14 @@ export default function WorkCalendar({ workerId }) {
   const confirmEditRef = useRef(null);
 
   const month = monthKey(ym.y, ym.m);
+
+  function invalidateRelatedCaches(workDate) {
+  const workMonth = workDate.slice(0, 7);
+
+  invalidateCachedWork(workerId, workMonth);
+  invalidateMonthlyStats(companyId, workMonth);
+  invalidateWorkerSummaries(companyId, workMonth, workerId);
+}
 
   const { data, error, loading, reload } = useFetch(
     async () => {
@@ -392,7 +405,7 @@ export default function WorkCalendar({ workerId }) {
           : {}),
       });
 
-      invalidateCachedWork(workerId, month);
+      invalidateRelatedCaches(selected);
       await reload();
 
       setEntryValue("");
@@ -422,7 +435,7 @@ export default function WorkCalendar({ workerId }) {
         pendingEdit.payload,
       );
 
-      invalidateCachedWork(workerId, month);
+      invalidateRelatedCaches(pendingEdit.date);
       await reload();
 
       setPendingEdit(null);
@@ -604,7 +617,7 @@ export default function WorkCalendar({ workerId }) {
         summary={summary}
         data={data}
         records={records}
-
+        refreshRef={refreshPayrollRef}
       />
     </div>
   );

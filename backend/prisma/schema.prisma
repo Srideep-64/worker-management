@@ -57,8 +57,8 @@ model Worker {
   emiratesIdExpiry DateTime?        @map("emirates_id_expiry") @db.Date
   labourCardNumber String?          @map("labour_card_number")
   jobTitle         String?          @map("job_title")
-  joiningDate      DateTime?        @map("joining_date") @db.Date
-  isActive Boolean @default(true) @map("is_active")
+  joiningDate      DateTime        @map("joining_date") @db.Date
+  leavingDate DateTime? @map("leaving_date") @db.Date
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
   advancePayments  AdvancePayment[]

@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import Modal from "../ui/Modal.jsx";
 import { api, ApiError } from "../../api/client.js";
@@ -30,7 +31,6 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
     )
   );
 
-  const [isActive, setIsActive] = useState(worker.isActive ?? true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -39,11 +39,12 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
     setSaving(true);
     setError("");
 
-    // Blank fields are omitted; isActive is always included.
-    const body = { isActive };
+    const body = {};
 
     Object.entries(form).forEach(([key, value]) => {
-      if (value) body[key] = value;
+      if (value) {
+        body[key] = value;
+      }
     });
 
     try {
@@ -57,8 +58,9 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
       setError(
         err instanceof ApiError
           ? err.message + details
-          : "Could not save"
+          : "Could not save worker details."
       );
+    } finally {
       setSaving(false);
     }
   }
@@ -66,32 +68,12 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
   return (
     <Modal title={`Edit ${worker.workerCode}`} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label htmlFor="worker-status" className="label">
-            Worker status
-          </label>
-
-          <select
-            id="worker-status"
-            className="input"
-            value={isActive ? "ACTIVE" : "INACTIVE"}
-            onChange={(e) => setIsActive(e.target.value === "ACTIVE")}
-          >
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-
-          <p className="mt-1 text-xs text-text-muted">
-            Inactive workers cannot receive new attendance records.
-            Existing attendance and payroll history will be preserved.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {FIELDS.map(([key, label, type]) => (
             <div key={key}>
               <label htmlFor={`worker-${key}`} className="label">
                 {label}
+                {key === "joiningDate" ? " *" : ""}
               </label>
 
               <input
@@ -105,10 +87,17 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
                     [key]: e.target.value,
                   }))
                 }
+                required={key === "joiningDate"}
               />
             </div>
           ))}
         </div>
+
+        <p className="text-xs text-text-muted">
+          Worker status is determined automatically from the joining
+          and leaving dates. Use Change Status on the worker profile
+          to record a leaving date.
+        </p>
 
         {error && (
           <p role="alert" className="text-sm text-danger">
@@ -126,8 +115,12 @@ export default function EditWorkerModal({ worker, onClose, onSaved }) {
             Cancel
           </button>
 
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? "Saving..." : "Save"}
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save details"}
           </button>
         </div>
       </form>

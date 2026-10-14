@@ -14,6 +14,9 @@
 
 const BASE_URL = "/api";
 
+// Share identical GET requests while they are in flight.
+const inFlightGets = new Map();
+
 // Custom API error
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -44,48 +47,81 @@ export function qs(params = {}) {
 }
 
 // Centralized fetch handler
+
 async function request(
   path,
   { method = "GET", body, headers, ...rest } = {}
 ) {
   const isFormData = body instanceof FormData;
+  const url = `${BASE_URL}${path}`;
+  const normalizedMethod = method.toUpperCase();
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    credentials: "include",
+  // Deduplicate only GET requests without custom options that could
+  // change the response. Other methods always execute independently.
+  const canDeduplicate =
+    normalizedMethod === "GET" &&
+    !body &&
+    !headers &&
+    Object.keys(rest).length === 0;
 
-    headers: {
-      ...(isFormData
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...headers,
-    },
-
-    body: body
-      ? isFormData
-        ? body
-        : JSON.stringify(body)
-      : undefined,
-
-    ...rest,
-  });
-
-  const contentType = response.headers.get("content-type") || "";
-
-  const payload = contentType.includes("application/json")
-    ? await response.json().catch(() => null)
-    : null;
-
-  if (!response.ok) {
-    throw new ApiError(
-      payload?.message ||
-        `Request failed with status ${response.status}`,
-      response.status,
-      payload?.errors
-    );
+  if (canDeduplicate && inFlightGets.has(url)) {
+    return inFlightGets.get(url);
   }
 
-  return payload;
+  const fetchPromise = (async () => {
+    const response = await fetch(url, {
+      method: normalizedMethod,
+      credentials: "include",
+
+      headers: {
+        ...(isFormData
+          ? {}
+          : { "Content-Type": "application/json" }),
+        ...headers,
+      },
+
+      body: body
+        ? isFormData
+          ? body
+          : JSON.stringify(body)
+        : undefined,
+
+      ...rest,
+    });
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : null;
+
+    if (!response.ok) {
+      throw new ApiError(
+        payload?.message ||
+          `Request failed with status ${response.status}`,
+        response.status,
+        payload?.errors
+      );
+    }
+
+    return payload;
+  })();
+
+  if (canDeduplicate) {
+    inFlightGets.set(url, fetchPromise);
+
+    try {
+      return await fetchPromise;
+    } finally {
+      // Do not remove a newer request accidentally.
+      if (inFlightGets.get(url) === fetchPromise) {
+        inFlightGets.delete(url);
+      }
+    }
+  }
+
+  return fetchPromise;
 }
 
 // API methods

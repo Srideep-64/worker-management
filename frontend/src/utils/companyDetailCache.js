@@ -1,3 +1,4 @@
+
 const companyDetailsCache = new Map();
 const companyWorkersCache = new Map();
 
@@ -18,25 +19,28 @@ export function invalidateCompanyDetails(companyId) {
   }
 }
 
-// Paginated workers list, cached separately for each status filter.
+// Paginated workers list, cached separately by company, month,
+// status filter, page, and page size.
 function getWorkersCacheKey(
   companyId,
   page,
   pageSize,
-  status = "ACTIVE"
+  status = "ACTIVE",
+  month = ""
 ) {
-  return `${companyId}:${status}:${page}:${pageSize}`;
+  return `${companyId}:${month}:${status}:${page}:${pageSize}`;
 }
 
 export function getCachedCompanyWorkers(
   companyId,
   page,
   pageSize,
-  status = "ACTIVE"
+  status = "ACTIVE",
+  month = ""
 ) {
   return (
     companyWorkersCache.get(
-      getWorkersCacheKey(companyId, page, pageSize, status)
+      getWorkersCacheKey(companyId, page, pageSize, status, month)
     ) ?? null
   );
 }
@@ -46,10 +50,11 @@ export function setCachedCompanyWorkers(
   page,
   pageSize,
   data,
-  status = "ACTIVE"
+  status = "ACTIVE",
+  month = ""
 ) {
   companyWorkersCache.set(
-    getWorkersCacheKey(companyId, page, pageSize, status),
+    getWorkersCacheKey(companyId, page, pageSize, status, month),
     data
   );
 }

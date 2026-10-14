@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { ChevronLeft, FileText, User } from "lucide-react";
+import { ChevronLeft, FileText, User, CalendarClock } from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import WorkCalendar from "../components/work-calender/WorkCalender.jsx";
 import DocumentsPanel from "../components/worker/DocumentsPanel.jsx";
 import EditWorkerModal from "../components/worker/EditWorkerModal.jsx";
+import ChangeWorkerStatusModal from "../components/worker/ChangeWorkerStatusModal.jsx";
 
 import { api } from "../api/client.js";
 import { useFetch, fmtDate } from "../hooks.js";
@@ -17,7 +18,10 @@ import {
 } from "../utils/profileCache.js";
 
 import { invalidateCompanyWorkers } from "../utils/companyDetailCache.js";
-
+import {
+  invalidateWorkerSummaries,
+  invalidateMonthlyStats,
+} from "../utils/companyCache.js";
 function Field({ label, value }) {
   return (
     <div>
@@ -75,6 +79,7 @@ export default function WorkerProfile() {
   const worker = workerData?.worker ?? workerData;
 
   const [editing, setEditing] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const [photoVersion, setPhotoVersion] = useState(0);
   const [hasPhoto, setHasPhoto] = useState(false);
 
@@ -149,8 +154,19 @@ export default function WorkerProfile() {
                 {worker.jobTitle ? ` · ${worker.jobTitle}` : ""}
               </p>
             </div>
+               <span
+                className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                  worker.status === "ACTIVE"
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {worker.status === "ACTIVE" ? "Active" : "Inactive"}
+              </span>
           </div>
 
+
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="btn-secondary"
@@ -159,6 +175,17 @@ export default function WorkerProfile() {
             <FileText className="h-4 w-4" />
             Edit details
           </button>
+
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setChangingStatus(true)}
+          >
+            <CalendarClock className="h-4 w-4" />
+            Change status
+          </button>
+        </div>
+
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 md:grid-cols-4">
@@ -179,6 +206,12 @@ export default function WorkerProfile() {
               worker.joiningDate ? fmtDate(worker.joiningDate) : null
             }
           />
+          <Field
+            label="Leaving date"
+            value={
+              worker.leavingDate ? fmtDate(worker.leavingDate) : null
+            }
+          />
         </div>
       </Card>
 
@@ -195,7 +228,10 @@ export default function WorkerProfile() {
         </Card>
 
         <Card title="Work calendar" className="lg:col-span-3">
-          <WorkCalendar workerId={worker.id} />
+          <WorkCalendar 
+          workerId={worker.id}
+          companyId={worker.companyId} 
+           />
         </Card>
       </div>
 
@@ -211,6 +247,21 @@ export default function WorkerProfile() {
           }}
         />
       )}
+
+      
+        {changingStatus && (
+          <ChangeWorkerStatusModal
+            worker={worker}
+            onClose={() => setChangingStatus(false)}
+            onSaved={() => {
+              setChangingStatus(false);
+              invalidateWorkerProfile(workerId);
+              invalidateCompanyWorkers(worker.companyId);
+              reload();
+            }}
+          />
+        )}
+
     </div>
   );
 }

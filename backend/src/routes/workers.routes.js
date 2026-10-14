@@ -1,13 +1,6 @@
+
 import { Router } from "express";
-import {
-  getWorkerWork,
-  monthQuerySchema,
-  createManualWork,
-  createManualWorkSchema,
-  updateManualWork,
-  updateManualWorkSchema,
-} from "../controllers/work.controller.js";
-import { validate } from "../middleware/validate.js";
+
 import {
   listWorkers,
   listWorkersQuerySchema,
@@ -16,8 +9,16 @@ import {
   createWorkerSchema,
   updateWorker,
   updateWorkerSchema,
-
 } from "../controllers/workers.controller.js";
+
+import {
+  getWorkerWork,
+  monthQuerySchema,
+  createManualWork,
+  createManualWorkSchema,
+  updateManualWork,
+  updateManualWorkSchema,
+} from "../controllers/work.controller.js";
 
 import {
   getWorkerPayroll,
@@ -29,46 +30,72 @@ import {
   createAdvanceSchema,
 } from "../controllers/payroll.controller.js";
 
+import { validate } from "../middleware/validate.js";
 
 const router = Router();
 
-router.get("/workers", validate({ query: listWorkersQuerySchema }), listWorkers);
-router.get("/workers/:id", getWorker);
-router.post("/workers", validate({ body: createWorkerSchema }), createWorker);
-router.put("/workers/:id", validate({ body: updateWorkerSchema }), updateWorker);
+// Workers
+router.get(
+  "/workers",
+  validate({ query: listWorkersQuerySchema }),
+  listWorkers,
+);
 
-router.get("/workers/:id/work", validate({ query: monthQuerySchema }), getWorkerWork);
+router.get("/workers/:id", getWorker);
+
+router.post(
+  "/workers",
+  validate({ body: createWorkerSchema }),
+  createWorker,
+);
+
+router.put(
+  "/workers/:id",
+  validate({ body: updateWorkerSchema }),
+  updateWorker,
+);
+
+// Work records
+router.get(
+  "/workers/:id/work",
+  validate({ query: monthQuerySchema }),
+  getWorkerWork,
+);
+
 router.post(
   "/workers/:id/work",
   validate({ body: createManualWorkSchema }),
-  createManualWork
+  createManualWork,
 );
+
 router.patch(
   "/workers/:id/work/:recordId",
   validate({ body: updateManualWorkSchema }),
-  updateManualWork
+  updateManualWork,
 );
 
+// Payroll
 router.get(
   "/workers/:id/payroll",
   validate({ query: payrollMonthSchema }),
-  getWorkerPayroll
+  getWorkerPayroll,
 );
 
 router.patch(
   "/workers/:id/payroll/rate",
   validate({ body: updateHourlyRateSchema }),
-  updateHourlyRate
+  updateHourlyRate,
 );
 
 router.post(
   "/workers/:id/advances",
   validate({ body: createAdvanceSchema }),
-  createAdvance
+  createAdvance,
 );
 
 router.delete(
   "/workers/:id/advances/:advanceId",
-  deleteAdvance
+  deleteAdvance,
 );
+
 export default router;
