@@ -11,7 +11,7 @@ export const listWorkersQuerySchema = z.object({
   roleId: z.string().uuid().optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "ALL"]).default("ACTIVE"),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  pageSize: z.coerce.number().int().min(1).max(30).default(15),
 });
 
 export const createWorkerSchema = z.object({

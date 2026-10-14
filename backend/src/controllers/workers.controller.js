@@ -48,7 +48,6 @@ export const updateWorkerSchema = createWorkerSchema
     leavingDate: nullableDateString,
   });
 
-
 export const listWorkersQuerySchema = z.object({
   search: z.string().trim().optional().default(""),
   companyId: z.string().uuid().optional(),
@@ -63,12 +62,13 @@ export const listWorkersQuerySchema = z.object({
     .optional(),
 
   page: z.coerce.number().int().min(1).optional().default(1),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(30).optional(),
+  pageSize: z.coerce.number().int().min(1).max(30).optional(),
 }).transform((query) => ({
   ...query,
-  limit: query.limit ?? query.pageSize ?? 20,
+  limit: query.pageSize ?? query.limit ?? 20,
 }));
+
 
 // Use the UAE calendar date when deciding whether a worker has joined.
 function getUaeDateParts() {
