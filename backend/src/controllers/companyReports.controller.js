@@ -41,7 +41,14 @@ export const getCompanyReportChecks = asyncHandler(async (req, res) => {
     where: {
         companyId: company.id,
         OR: [
-          { isActive: true },
+          {
+            joiningDate: { lt: end },
+            leavingDate: null,
+          },
+          {
+            joiningDate: { lt: end },
+            leavingDate: { gte: start },
+          },
           {
             workRecords: {
               some: {

@@ -14,6 +14,38 @@ function isoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+function dateOnly(value) {
+  if (!value) return null;
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toISOString().slice(0, 10);
+}
+
+function isWorkerActiveForMonth(worker, periodDate) {
+  const year = periodDate.getUTCFullYear();
+  const month = periodDate.getUTCMonth();
+
+  const monthStart = new Date(
+    Date.UTC(year, month, 1),
+  ).toISOString().slice(0, 10);
+
+  const nextMonthStart = new Date(
+    Date.UTC(year, month + 1, 1),
+  ).toISOString().slice(0, 10);
+
+  const joiningDate = dateOnly(worker.joiningDate);
+  const leavingDate = dateOnly(worker.leavingDate);
+
+  return (
+    joiningDate !== null &&
+    joiningDate < nextMonthStart &&
+    (!leavingDate || leavingDate >= monthStart)
+  );
+}
+
 // Array-of-arrays mode, rather than the object mode sheet_to_json normally
 // offers, so header matching can be done case-insensitively (WORKER_ID vs
 // worker_id vs Worker_Id) instead of requiring an exact key match.
@@ -175,12 +207,12 @@ if (missingDays.length > 0) {
       return;
     }
 
-    if (!worker.isActive) {
+    if (!isWorkerActiveForMonth(worker, periodDate)) {
       errors.push({
         sheet: "Sheet1",
         row: rowNum,
         field: "WORKER_ID",
-        message: `Worker "${workerCode}" is inactive and cannot be included in a new timesheet`,
+        message: `Worker "${workerCode}" is not active for the selected reporting month`,
       });
       return;
     }
@@ -323,12 +355,12 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, rolesByCode }) {
       return;
     }
 
-    if (!worker.isActive) {
+    if (!isWorkerActiveForMonth(worker, periodDate)) {
       errors.push({
         sheet: "Sheet1",
         row: rowNum,
         field: "WORKER_ID",
-        message: `Worker "${workerCode}" is inactive and cannot be included in a new timesheet`,
+        message: `Worker "${workerCode}" is not active for the selected reporting month`,
       });
       return;
     }

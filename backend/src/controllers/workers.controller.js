@@ -114,17 +114,11 @@ function getUaeCalendarDates() {
 // A leaving date anywhere in the current month means the worker
 // remains active for the entire current month.
 function getWorkerStatus(worker) {
-  const { todayString, monthStartString } = getUaeCalendarDates();
+  const currentMonth = getUaeCalendarDates()
+    .todayString
+    .slice(0, 7);
 
-  const joiningDate = dateOnly(worker.joiningDate);
-  const leavingDate = dateOnly(worker.leavingDate);
-
-  const hasJoined = joiningDate && joiningDate <= todayString;
-
-  const hasNotLeftYet =
-    !leavingDate || leavingDate >= monthStartString;
-
-  return hasJoined && hasNotLeftYet ? "ACTIVE" : "INACTIVE";
+  return getWorkerStatusForMonth(worker, currentMonth);
 }
 
 

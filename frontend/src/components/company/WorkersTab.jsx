@@ -190,7 +190,7 @@ export default function WorkersTab({
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-3 py-2 font-medium">Worker ID</th>
+                <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Job title</th>
                 <th className="px-3 py-2 font-medium">Work hours</th>
@@ -199,7 +199,7 @@ export default function WorkersTab({
             </thead>
 
             <tbody>
-              {workers.map((worker) => {
+              {workers.map((worker,index) => {
                 const stats = hoursByWorker.get(worker.id);
                 const unavailable = stats?.failed;
 
@@ -207,7 +207,10 @@ export default function WorkersTab({
                   <tr
                     key={worker.id}
                     className="border-b border-border last:border-0"
-                  >
+                  >  
+                    <td className="px-3 py-2.5 text-text">
+                      {index+1}
+                    </td>
                     <td className="px-3 py-2.5 font-medium">
                       <Link
                         to={`/workers/${worker.id}`}
@@ -215,15 +218,15 @@ export default function WorkersTab({
                           returnTo: `/companies/${companyId}`,
                           returnLabel: "Company Details",
                           returnTab: "Workers",
+                          returnPage: page,
+                          returnWorkerStatus: workerStatus,
+                          returnMonth: month,
+                          restoreScrollOnReturn: false,
                         }}
                         className="font-medium text-accent hover:underline"
                       >
-                        {worker.workerCode}
+                        {worker.name}
                       </Link>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-text">
-                      {worker.name}
                     </td>
 
                     <td className="px-3 py-2.5 text-text-muted">

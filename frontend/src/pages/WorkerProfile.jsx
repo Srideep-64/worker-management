@@ -18,10 +18,7 @@ import {
 } from "../utils/profileCache.js";
 
 import { invalidateCompanyWorkers } from "../utils/companyDetailCache.js";
-import {
-  invalidateWorkerSummaries,
-  invalidateMonthlyStats,
-} from "../utils/companyCache.js";
+
 function Field({ label, value }) {
   return (
     <div>
@@ -120,7 +117,14 @@ export default function WorkerProfile() {
     <div className="space-y-4">
       <Link
         to={returnTo}
-        state={{ activeTab: location.state?.returnTab || "Workers"}}
+        state={{
+          activeTab: location.state?.returnTab || "Workers",
+          Workerpage: location.state?.returnPage,
+          workerStatus: location.state?.returnWorkerStatus,
+          month: location.state?.returnMonth,
+          restoreScroll:
+            location.state?.restoreScrollOnReturn === true,
+        }}
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
       >
         <ChevronLeft className="h-4 w-4" />

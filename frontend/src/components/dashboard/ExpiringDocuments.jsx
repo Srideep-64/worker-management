@@ -6,6 +6,11 @@ import { RefreshCw } from "lucide-react";
 import { api } from "../../api/client.js";
 import { useFetch, DOC_LABELS } from "../../hooks.js";
 
+import {
+  saveScrollPosition,
+  useRestoreScrollPosition,
+} from "../../utils/scrollPosition.js";
+
 // Cache expiring documents indefinitely until manually refreshed.
 let expiringDocumentsCache = null;
 
@@ -26,6 +31,8 @@ export default function ExpiringDocuments() {
     },
     [refreshKey]
   );
+
+  useRestoreScrollPosition("/", !loading);
 
   const documents = data?.items ?? [];
 
@@ -95,7 +102,7 @@ export default function ExpiringDocuments() {
           <table className="w-full min-w-[600px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs text-muted-foreground">
-                <th className="px-3 py-3 font-medium">Worker ID</th>
+                <th className="px-3 py-3 font-medium"></th>
                 <th className="px-3 py-3 font-medium">Name</th>
                 <th className="px-3 py-3 font-medium">Document</th>
                 <th className="px-3 py-3 font-medium">Expiry date</th>
@@ -103,7 +110,7 @@ export default function ExpiringDocuments() {
             </thead>
 
             <tbody>
-              {documents.slice(0, 8).map((document) => {
+              {documents.slice(0, 8).map((document,index) => {
                 const daysLeft = document.daysLeft;
 
                 const expiryDate = document.expiry
@@ -120,17 +127,20 @@ export default function ExpiringDocuments() {
                     key={`${document.workerId}-${document.type}-${document.expiry}`}
                     className="border-b border-border last:border-0 transition-colors hover:bg-paper"
                   >
+                    <td>{index + 1}</td>
                     <td className="px-3 py-3">
                       <Link
                         to={`/workers/${document.workerId}`}
                         className="font-medium text-accent hover:underline"
+                        state={{
+                          returnTo: "/",
+                          returnLabel:"Dashboard",
+                          restoreScrollOnReturn: true,
+                        }}
+                        onClick={() => saveScrollPosition("/")}
                       >
-                        {document.workerCode || document.workerId}
+                        {document.name}
                       </Link>
-                    </td>
-
-                    <td className="px-3 py-3 text-foreground">
-                      {document.name}
                     </td>
 
                     <td className="px-3 py-3 text-foreground">

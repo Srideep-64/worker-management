@@ -37,7 +37,11 @@ const PUBLIC_FIELDS = {
 };
 
 async function requireWorker(id) {
-  const worker = await prisma.worker.findUnique({ where: { id }, select: { id: true } });
+  const worker = await prisma.worker.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
   if (!worker) throw ApiError.notFound("Worker not found");
   return worker;
 }
@@ -114,21 +118,27 @@ export const streamDocument = asyncHandler(async (req, res) => {
   res.send(buffer);
 });
 
-// Expiry tracking uses the expiry dates stored on the worker record.
-// Expired documents are included (daysLeft < 0) so they can't be missed.
+// Expiry tracking includes active and inactive workers.
+// Worker status is derived from joining and leaving dates.
 export const listExpiring = asyncHandler(async (req, res) => {
   const { days, companyId } = req.query;
   const cutoff = new Date(Date.now() + days * 86400000);
 
   const workers = await prisma.worker.findMany({
     where: {
-      companyId,
-      OR: [{ passportExpiry: { lte: cutoff } }, { visaExpiry: { lte: cutoff } }, { emiratesIdExpiry: { lte: cutoff } }],
+      ...(companyId ? { companyId } : {}),
+      OR: [
+        { passportExpiry: { lte: cutoff } },
+        { visaExpiry: { lte: cutoff } },
+        { emiratesIdExpiry: { lte: cutoff } },
+      ],
     },
     select: {
       id: true,
       workerCode: true,
       name: true,
+      joiningDate: true,
+      leavingDate: true,
       company: { select: { code: true } },
       passportExpiry: true,
       visaExpiry: true,
@@ -136,27 +146,59 @@ export const listExpiring = asyncHandler(async (req, res) => {
     },
   });
 
-  const today = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  // Use UTC date strings to compare calendar dates consistently.
+  const today = new Date().toISOString().slice(0, 10);
+  const todayUtc = Date.parse(`${today}T00:00:00Z`);
+  const cutoffDate = new Date(cutoff).toISOString().slice(0, 10);
+
+  function dateOnly(value) {
+    return value ? new Date(value).toISOString().slice(0, 10) : null;
+  }
+
+  function getWorkerStatus(worker) {
+    const joiningDate = dateOnly(worker.joiningDate);
+    const leavingDate = dateOnly(worker.leavingDate);
+
+    const active =
+      joiningDate !== null &&
+      joiningDate <= today &&
+      (!leavingDate ||
+        leavingDate >= today.slice(0, 7) + "-01");
+
+    return active ? "ACTIVE" : "INACTIVE";
+  }
+
   const items = [];
-  for (const w of workers) {
+
+  for (const worker of workers) {
     for (const [type, expiry] of [
-      ["PASSPORT", w.passportExpiry],
-      ["VISA", w.visaExpiry],
-      ["EMIRATES_ID", w.emiratesIdExpiry],
+      ["PASSPORT", worker.passportExpiry],
+      ["VISA", worker.visaExpiry],
+      ["EMIRATES_ID", worker.emiratesIdExpiry],
     ]) {
-      if (expiry && expiry <= cutoff) {
-        items.push({
-          workerId: w.id,
-          workerCode: w.workerCode,
-          name: w.name,
-          company: w.company.code,
-          type,
-          expiry: expiry.toISOString().slice(0, 10),
-          daysLeft: Math.round((expiry.getTime() - today) / 86400000),
-        });
-      }
+      if (!expiry) continue;
+
+      const expiryDate = dateOnly(expiry);
+
+      if (expiryDate > cutoffDate) continue;
+
+      items.push({
+        workerId: worker.id,
+        workerCode: worker.workerCode,
+        name: worker.name,
+        company: worker.company.code,
+        type,
+        expiry: expiryDate,
+        daysLeft: Math.round(
+          (Date.parse(`${expiryDate}T00:00:00Z`) - todayUtc) /
+            86400000
+        ),
+        workerStatus: getWorkerStatus(worker),
+      });
     }
   }
+
   items.sort((a, b) => a.daysLeft - b.daysLeft);
+
   res.json({ items });
 });

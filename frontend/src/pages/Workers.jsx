@@ -9,6 +9,10 @@ import AddWorkerModal from "../components/worker/AddWorkerModal.jsx";
 import { api, qs } from "../api/client.js";
 import { useFetch, useDebounced } from "../hooks.js";
 
+import {
+  saveScrollPosition,
+  useRestoreScrollPosition,
+} from "../utils/scrollPosition.js";
 
 import {
   getCachedCompanies,
@@ -31,6 +35,7 @@ export default function Workers() {
   const [adding, setAdding] = useState(false);
 
   const debouncedSearch = useDebounced(search);
+  
 
   const {
     data: lookups,
@@ -86,6 +91,8 @@ export default function Workers() {
 
     return response;
   }, [debouncedSearch, companyId, status, page]);
+
+  useRestoreScrollPosition("/workers", !loading);
 
 
   const workers = data?.workers ?? [];
@@ -247,7 +254,7 @@ export default function Workers() {
             <table className="w-full min-w-[650px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-                  <th className="px-3 py-3 font-medium">Worker ID</th>
+                  <th className="px-3 py-3 font-medium"></th>
                   <th className="px-3 py-3 font-medium">Name</th>
                   <th className="px-3 py-3 font-medium">Company</th>
                   <th className="px-3 py-3 font-medium">Job title</th>
@@ -255,22 +262,28 @@ export default function Workers() {
               </thead>
 
               <tbody>
-                {workers.map((worker) => (
+                {workers.map((worker,index) => (
                   <tr
                     key={worker.id}
                     className="border-b border-border last:border-0 hover:bg-paper"
                   >
+                    <td className="px-3 py-3 text-text">
+                      {index+1}
+                    </td>
+
                     <td className="px-3 py-3 font-medium">
                       <Link
                         to={`/workers/${worker.id}`}
                         className="text-accent-dark hover:underline"
+                          state={{
+                            returnTo: "/workers",
+                            returnLabel: "Workers",
+                            restoreScrollOnReturn: true,
+                          }}
+                          onClick={() => saveScrollPosition("/workers")}
                       >
-                        {worker.workerCode}
+                        {worker.name}
                       </Link>
-                    </td>
-
-                    <td className="px-3 py-3 text-text">
-                      {worker.name}
                     </td>
 
                     <td className="px-3 py-3 text-text-muted">

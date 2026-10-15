@@ -9,6 +9,11 @@ import ExpiryBadge from "../components/ui/ExpiryBadge.jsx";
 import { api } from "../api/client.js";
 import { useFetch, DOC_LABELS } from "../hooks.js";
 
+import {
+  saveScrollPosition,
+  useRestoreScrollPosition,
+} from "../utils/scrollPosition.js";
+
 // Cache each expiry window indefinitely until manually refreshed.
 const expiringDocumentsCache = new Map();
 
@@ -25,6 +30,7 @@ export default function Documents() {
   const [days, setDays] = useState("30");
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [status, setStatus] = useState("ACTIVE");
 
   const { data, error, loading, reload } = useFetch(async () => {
     // Use cached data unless a manual refresh was requested.
@@ -40,6 +46,8 @@ export default function Documents() {
 
     return response;
   }, [days, refreshKey]);
+
+  useRestoreScrollPosition("/documents", !loading);
 
   async function handleRefresh() {
     if (loading || refreshing) return;
@@ -63,7 +71,8 @@ export default function Documents() {
       (!type || i.type === type) &&
       (!q ||
         i.workerCode.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q))
+        i.name.toLowerCase().includes(q)) &&
+      (status === "ALL" || i.workerStatus === status)
   );
 
   return (
@@ -91,6 +100,16 @@ export default function Documents() {
               {DOC_LABELS[t]}
             </option>
           ))}
+        </select>
+        
+        <select
+          className="input w-auto"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="ACTIVE">Active workers</option>
+          <option value="INACTIVE">Inactive workers</option>
+          <option value="ALL">All workers</option>
         </select>
 
         <select
@@ -133,7 +152,7 @@ export default function Documents() {
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wide text-text-muted">
-                <th className="pb-2 font-medium">Worker</th>
+                <th className="pb-2 font-medium"></th>
                 <th className="pb-2 font-medium">Name</th>
                 <th className="pb-2 font-medium">Company</th>
                 <th className="pb-2 font-medium">Document</th>
@@ -143,17 +162,23 @@ export default function Documents() {
             </thead>
 
             <tbody className="divide-y divide-border">
-              {items.map((i) => (
+              {items.map((i,index) => (
                 <tr key={`${i.workerId}-${i.type}`}>
+                  <td>{index + 1}</td>
                   <td className="py-2.5 font-medium">
                     <Link
                       className="text-accent-dark hover:underline"
                       to={`/workers/${i.workerId}`}
+                      state={{
+                        returnTo:"/documents",
+                        returnLabel:"Documents",
+                        restoreScrollOnReturn:true,
+                      }}
+                      onClick={() => saveScrollPosition("/documents")}
                     >
-                      {i.workerCode}
+                      {i.name}
                     </Link>
                   </td>
-                  <td className="py-2.5 text-text">{i.name}</td>
                   <td className="py-2.5 text-text-muted">{i.company}</td>
                   <td className="py-2.5 text-text-muted">
                     {DOC_LABELS[i.type]}
