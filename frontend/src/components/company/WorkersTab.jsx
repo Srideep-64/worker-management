@@ -26,6 +26,7 @@ export default function WorkersTab({
   hasNextPage,
   workersLoading,
   setWorkersRefreshKey,
+  PAGE_SIZE
 }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -209,7 +210,7 @@ export default function WorkersTab({
                     className="border-b border-border last:border-0"
                   >  
                     <td className="px-3 py-2.5 text-text">
-                      {index+1}
+                      {(page - 1) * PAGE_SIZE + index+1}
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       <Link
@@ -218,10 +219,9 @@ export default function WorkersTab({
                           returnTo: `/companies/${companyId}`,
                           returnLabel: "Company Details",
                           returnTab: "Workers",
-                          returnPage: page,
+                          returnWorkerPage: page,
                           returnWorkerStatus: workerStatus,
                           returnMonth: month,
-                          restoreScrollOnReturn: false,
                         }}
                         className="font-medium text-accent hover:underline"
                       >

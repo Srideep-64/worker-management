@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { FolderLock, Search, RefreshCw } from "lucide-react";
 
@@ -31,6 +31,12 @@ export default function Documents() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [status, setStatus] = useState("ACTIVE");
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+      setPage(1);
+    }, [search, type, status, days]);
 
   const { data, error, loading, reload } = useFetch(async () => {
     // Use cached data unless a manual refresh was requested.
@@ -73,6 +79,13 @@ export default function Documents() {
         i.workerCode.toLowerCase().includes(q) ||
         i.name.toLowerCase().includes(q)) &&
       (status === "ALL" || i.workerStatus === status)
+  );
+
+  const totalPages = Math.ceil(items.length / PAGE_SIZE);
+
+  const paginatedItems = items.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
   );
 
   return (
@@ -148,52 +161,89 @@ export default function Documents() {
           description="Documents are stored privately and only opened through an authenticated request — open a worker's profile to view or replace files."
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead>
-              <tr className="text-xs uppercase tracking-wide text-text-muted">
-                <th className="pb-2 font-medium"></th>
-                <th className="pb-2 font-medium">Name</th>
-                <th className="pb-2 font-medium">Company</th>
-                <th className="pb-2 font-medium">Document</th>
-                <th className="pb-2 font-medium">Expires</th>
-                <th className="pb-2 font-medium">Status</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-border">
-              {items.map((i,index) => (
-                <tr key={`${i.workerId}-${i.type}`}>
-                  <td>{index + 1}</td>
-                  <td className="py-2.5 font-medium">
-                    <Link
-                      className="text-accent-dark hover:underline"
-                      to={`/workers/${i.workerId}`}
-                      state={{
-                        returnTo:"/documents",
-                        returnLabel:"Documents",
-                        restoreScrollOnReturn:true,
-                      }}
-                      onClick={() => saveScrollPosition("/documents")}
-                    >
-                      {i.name}
-                    </Link>
-                  </td>
-                  <td className="py-2.5 text-text-muted">{i.company}</td>
-                  <td className="py-2.5 text-text-muted">
-                    {DOC_LABELS[i.type]}
-                  </td>
-                  <td className="py-2.5 tabular-nums text-text-muted">
-                    {i.expiry}
-                  </td>
-                  <td className="py-2.5">
-                    <ExpiryBadge daysLeft={i.daysLeft} />
-                  </td>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wide text-text-muted">
+                  <th className="pb-2 font-medium"></th>
+                  <th className="pb-2 font-medium">Name</th>
+                  <th className="pb-2 font-medium">Company</th>
+                  <th className="pb-2 font-medium">Document</th>
+                  <th className="pb-2 font-medium">Expires</th>
+                  <th className="pb-2 font-medium">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody className="divide-y divide-border">
+                {paginatedItems.map((i, index) => (
+                  <tr key={`${i.workerId}-${i.type}`}>
+                    <td className="py-2.5">
+                      {(page - 1) * PAGE_SIZE + index + 1}
+                    </td>
+                    <td className="py-2.5 font-medium">
+                      <Link
+                        className="text-accent-dark hover:underline"
+                        to={`/workers/${i.workerId}`}
+                        state={{
+                          returnTo: "/documents",
+                          returnLabel: "Documents",
+                          restoreScrollOnReturn: true,
+                        }}
+                        onClick={() => saveScrollPosition("/documents")}
+                      >
+                        {i.name}
+                      </Link>
+                    </td>
+                    <td className="py-2.5 text-text-muted">{i.company}</td>
+                    <td className="py-2.5 text-text-muted">
+                      {DOC_LABELS[i.type]}
+                    </td>
+                    <td className="py-2.5 tabular-nums text-text-muted">
+                      {i.expiry}
+                    </td>
+                    <td className="py-2.5">
+                      <ExpiryBadge daysLeft={i.daysLeft} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {items.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-text-muted">
+                Showing {(page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, items.length+PAGE_SIZE)} of {items.length} documents
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </button>
+
+                <span className="text-sm">
+                  Page {page} of {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );

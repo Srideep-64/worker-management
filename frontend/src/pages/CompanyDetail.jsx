@@ -34,7 +34,7 @@ export default function CompanyDetail() {
   );
 
   const PAGE_SIZE = 15;
-  const [workerPage, setWorkerPage] = useState(1);
+  const [workerPage, setWorkerPage] = useState(location.state?.workerPage ?? 1);
   const [workersRefreshKey, setWorkersRefreshKey] = useState(0);
   const [workerStatus, setWorkerStatus] = useState("ACTIVE");
 
@@ -207,6 +207,7 @@ export default function CompanyDetail() {
                     hasNextPage={hasNextPage}
                     workersLoading={workersLoading}
                     setWorkersRefreshKey={setWorkersRefreshKey}
+                    PAGE_SIZE={PAGE_SIZE}
                   />
                 )}
               </>

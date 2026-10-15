@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Search, Users, RefreshCw } from "lucide-react";
 
@@ -24,7 +24,7 @@ import {
 } from "../utils/listCache.js";
 
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 25;
 
 
 export default function Workers() {
@@ -36,7 +36,6 @@ export default function Workers() {
 
   const debouncedSearch = useDebounced(search);
   
-
   const {
     data: lookups,
     error: lookupError,
@@ -105,6 +104,12 @@ export default function Workers() {
       setPage(1);
     };
   }
+
+    useEffect(() => {
+  if (pagination?.totalPages && page > pagination.totalPages) {
+    setPage(1);
+  }
+}, [pagination?.totalPages, page]);
 
 
   function handleWorkerSaved() {
@@ -268,7 +273,7 @@ export default function Workers() {
                     className="border-b border-border last:border-0 hover:bg-paper"
                   >
                     <td className="px-3 py-3 text-text">
-                      {index+1}
+                      {(page - 1) * PAGE_SIZE +index+1}
                     </td>
 
                     <td className="px-3 py-3 font-medium">
@@ -287,7 +292,7 @@ export default function Workers() {
                     </td>
 
                     <td className="px-3 py-3 text-text-muted">
-                      {worker.company?.code || worker.company?.name || "—"}
+                      {worker.company.code}
                     </td>
 
                     <td className="px-3 py-3 text-text-muted">
@@ -301,9 +306,11 @@ export default function Workers() {
 
           {pagination && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-text-muted">
-              <span>
-                {totalWorkers} worker{totalWorkers === 1 ? "" : "s"}
-              </span>
+            <span>
+              Showing {(page - 1) * PAGE_SIZE + 1}{" – "}
+              {Math.min(page * PAGE_SIZE, pagination?.total ?? 0)}
+              {" "}of {pagination?.total ?? 0} workers
+            </span>
 
               <div className="flex items-center gap-2">
                 <button

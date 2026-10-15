@@ -121,7 +121,6 @@ function getWorkerStatus(worker) {
   return getWorkerStatusForMonth(worker, currentMonth);
 }
 
-
 function getWorkerStatusForMonth(worker, month) {
   const [year, monthNumber] = month.split("-").map(Number);
 
@@ -226,6 +225,7 @@ export const listWorkers = asyncHandler(async (req, res) => {
         select: {
           id: true,
           name: true,
+          code:true,
         },
       },
     },
