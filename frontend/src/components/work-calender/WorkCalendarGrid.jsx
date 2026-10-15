@@ -1,3 +1,4 @@
+import { useEffect, useRef,useState } from "react";
 
 import {
   CELL_TONE,
@@ -11,31 +12,50 @@ export default function WorkCalendarGrid({
   month,
   selected,
   byDate,
+  entryValue,
+  onEntryValueChange,
+  canEditSelected,
+  entryDisabled,
   onSelectDate,
+  onSubmit,
 }) {
+  const cellInputRef = useRef(null);
+
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  // Convert Sunday-first JS indexing into a Monday-first calendar.
   const offset = (new Date(year, month, 1).getDay() + 6) % 7;
-
   const currentMonth = `${year}-${pad(month + 1)}`;
+
+  useEffect(() => {
+    if (!canEditSelected || entryDisabled) return;
+
+    cellInputRef.current?.focus({ preventScroll: true });
+  }, [selected, canEditSelected, entryDisabled]);
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+
+    const updateMobile = () => setIsMobile(media.matches);
+
+    updateMobile();
+    media.addEventListener("change", updateMobile);
+
+    return () => media.removeEventListener("change", updateMobile);
+  }, []);
 
   return (
     <div className="grid grid-cols-7 gap-1.5">
-      {WEEKDAYS.map((day, index) => {
-        const isSunday = index === 6;
-
-        return (
-          <div
-            key={day}
-            className={`pb-1 text-center text-xs font-bold ${
-              isSunday ? "text-red-700" : "text-text-muted"
-            }`}
-          >
-            {day}
-          </div>
-        );
-      })}
+      {WEEKDAYS.map((day, index) => (
+        <div
+          key={day}
+          className={`pb-1 text-center text-xs font-bold ${
+            index === 6 ? "text-red-700" : "text-text-muted"
+          }`}
+        >
+          {day}
+        </div>
+      ))}
 
       {Array.from({ length: offset }, (_, index) => (
         <div key={`offset-${index}`} />
@@ -45,44 +65,80 @@ export default function WorkCalendarGrid({
         const day = index + 1;
         const key = `${currentMonth}-${pad(day)}`;
         const record = byDate[key];
-
-        // Sunday is the seventh column in the Monday-first grid.
+        const isSelected = selected === key;
         const isSunday = (offset + index) % 7 === 6;
+        const editable = isSelected && canEditSelected;
+
+        const displayValue = record
+          ? record.status === "WORKED"
+            ? record.hours ?? "—"
+            : SHORT[record.status] ?? "—"
+          : "";
 
         return (
-          <button
+          <div
             key={key}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelectDate(key)}
-            aria-pressed={selected === key}
-            aria-label={`${key}${record ? `, ${record.status}` : ""}`}
-            className={`flex h-14 flex-col items-start justify-between rounded-md p-1.5 text-left text-xs transition-colors ${
+            onKeyDown={(event) => {
+              if (
+                event.target === event.currentTarget &&
+                (event.key === "Enter" || event.key === " ")
+              ) {
+                event.preventDefault();
+                onSelectDate(key);
+              }
+            }}
+            aria-pressed={isSelected}
+            aria-label={`Select ${key}`}
+            className={`flex h-14 min-w-0 cursor-pointer flex-col items-stretch justify-between overflow-hidden rounded-md border p-1.5 text-xs transition-colors ${
               record
                 ? CELL_TONE[record.status] ||
-                  "border border-border text-text"
-                : "border border-dashed border-border text-text-muted"
+                  "border-border text-text"
+                : "border-dashed border-border text-text-muted"
             } ${
               isSunday ? "border-2 border-red-400" : ""
             } ${
-              selected === key ? "ring-2 ring-accent" : ""
+              isSelected ? "ring-2 ring-accent" : ""
             }`}
           >
             <span
-              className={`font-semibold ${
+              className={`w-fit font-semibold ${
                 isSunday ? "text-red-700" : ""
               }`}
             >
               {day}
             </span>
 
-            <span className="self-end text-sm font-semibold tabular-nums">
-              {record
-                ? record.status === "WORKED"
-                  ? record.hours ?? "—"
-                  : SHORT[record.status] ?? "—"
-                : ""}
-            </span>
-          </button>
+            {editable ? (
+              <input  
+              ref={cellInputRef}
+              type="text"
+              inputMode={isMobile ? "none" : "decimal"}
+              readOnly={isMobile}
+              autoComplete="off"
+              aria-label={`${key} hours or status`}
+              placeholder="Hours/A/H/W"
+              value={entryValue}
+              disabled={entryDisabled}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => onEntryValueChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSubmit();
+                }
+              }}
+              className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-accent-dark outline-none placeholder:text-[9px] placeholder:text-text-muted"
+            />
+            ) : (
+              <span className="w-full truncate text-right text-sm font-semibold tabular-nums">
+                {displayValue || "\u00a0"}
+              </span>
+            )}
+          </div>
         );
       })}
     </div>

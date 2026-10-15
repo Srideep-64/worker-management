@@ -9,7 +9,7 @@ function ChangeRow({ label, oldValue, newValue }) {
           Previous {label}
         </p>
 
-        <p className="break-words text-xl font-bold text-red-600 sm:text-2xl">
+        <p className="break-words text-xl font-bold text-red-600 dark:text-red-400 sm:text-2xl">
           {oldValue}
         </p>
       </div>
@@ -19,7 +19,7 @@ function ChangeRow({ label, oldValue, newValue }) {
           New {label}
         </p>
 
-        <p className="break-words text-xl font-bold text-green-600 sm:text-2xl">
+        <p className="break-words text-xl font-bold text-green-600 dark:text-green-400 sm:text-2xl">
           {newValue}
         </p>
       </div>
@@ -37,14 +37,12 @@ export default function ConfirmWorkChange({
 
   return (
     <div
-      className="space-y-4 rounded-lg border-2 border-border bg-white p-4 sm:p-5"
+      className="space-y-4 rounded-lg border-2 border-border bg-surface p-4 sm:p-5"
       role="region"
       aria-label="Confirm manual record change"
     >
       <div>
-        <h3 className="text-lg font-bold text-text sm:text-xl">
-          Confirm record change
-        </h3>
+
 
         <p className="mt-1 text-sm text-text-muted">
           You are changing the manual record of{" "}

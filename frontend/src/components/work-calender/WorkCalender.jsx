@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight,RefreshCw } from "lucide-react";
 
 import Badge from "../ui/Badge.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
+import Modal from "../ui/Modal.jsx";
 import { api } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
 
@@ -11,6 +12,7 @@ import WorkCalendarGrid from "./WorkCalendarGrid.jsx";
 import WorkEntryForm from "./WorkEntryForm.jsx";
 import ConfirmWorkChange from "./ConfirmWorkChange.jsx";
 import WorkSummary from "./WorkSummary.jsx";
+import WorkMobileKeyboard from "./WorkMobileKeyboard.jsx";
 
 import {
   getCachedWork,
@@ -38,6 +40,20 @@ import {
   pad,
 } from "./workCalendarUtils.js";
 
+  function getRecordEntryValue(record) {
+    if (!record || record.source !== "MANUAL") return "";
+
+    if (record.status === "WORKED") {
+      return String(record.hours ?? "");
+    }
+
+    return (
+      Object.entries(STATUS_FROM_KEY).find(
+        ([, status]) => status === record.status,
+      )?.[0] ?? ""
+    );
+  }
+
 export default function WorkCalendar({ workerId, companyId }) {
   const today = dateKey(new Date());
 
@@ -58,11 +74,10 @@ export default function WorkCalendar({ workerId, companyId }) {
   const [saving, setSaving] = useState(false);
   const [pendingEdit, setPendingEdit] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [focusRoleAfterError, setFocusRoleAfterError] = useState(false);
   const refreshPayrollRef = useRef(null);
 
-  const entryInputRef = useRef(null);
-  const shouldFocusEntryRef = useRef(false);
-  const confirmEditRef = useRef(null);
+  const roleSelectRef = useRef(null);
 
   const month = monthKey(ym.y, ym.m);
 
@@ -138,36 +153,6 @@ export default function WorkCalendar({ workerId, companyId }) {
     selectedRecord?.role?.id,
   ]);
 
-
-// Focus the entry field when navigating between dates.
-    useEffect(() => {
-      if (pendingEdit) return;
-
-      const frame = requestAnimationFrame(() => {
-        if (
-          shouldFocusEntryRef.current ||
-          document.activeElement !== entryInputRef.current
-        ) {
-          entryInputRef.current?.focus();
-          shouldFocusEntryRef.current = false;
-        }
-      });
-
-      return () => cancelAnimationFrame(frame);
-    }, [selected, selectedRoleId, isEditingManual, pendingEdit, saving]);
-
-      useEffect(() => {
-      if (!pendingEdit) return;
-
-      const frame = requestAnimationFrame(() => {
-        confirmEditRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      });
-
-      return () => cancelAnimationFrame(frame);
-    }, [pendingEdit]);
     
   function clearPendingEntry() {
     setEntryValue("");
@@ -224,6 +209,36 @@ export default function WorkCalendar({ workerId, companyId }) {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [selected, today]);
+
+  useEffect(() => {
+  setEntryValue(getRecordEntryValue(selectedRecord));
+}, [
+  selected,
+  selectedRecord?.id,
+  selectedRecord?.source,
+  selectedRecord?.status,
+  selectedRecord?.hours,
+]);
+
+  useEffect(() => {
+    if (!focusRoleAfterError) return;
+
+    const frame = requestAnimationFrame(() => {
+      const roleSelect = roleSelectRef.current;
+
+      if (roleSelect) {
+        roleSelect.focus();
+        roleSelect.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+
+      setFocusRoleAfterError(false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [focusRoleAfterError]);
 
   function navigateDate(delta) {
     const currentDate = parseDate(selected || today);
@@ -342,6 +357,7 @@ export default function WorkCalendar({ workerId, companyId }) {
           setSaveError(
             "Select a role when changing the record to Worked.",
           );
+          setFocusRoleAfterError(true);
           return;
         }
       }
@@ -389,6 +405,7 @@ export default function WorkCalendar({ workerId, companyId }) {
     // New records save normally without a confirmation step.
     if (!selectedRoleId) {
       setSaveError("Select a role first.");
+      setFocusRoleAfterError(true);
       return;
     }
 
@@ -411,7 +428,7 @@ export default function WorkCalendar({ workerId, companyId }) {
       setEntryValue("");
       setSaveError("");
 
-      shouldFocusEntryRef.current = true;
+      
       navigateDate(1);
     } catch (err) {
       setSaveError(
@@ -442,7 +459,6 @@ export default function WorkCalendar({ workerId, companyId }) {
       setEntryValue("");
       setSaveError("");
       
-      shouldFocusEntryRef.current = true;
       navigateDate(1);
 
     } catch (err) {
@@ -459,10 +475,6 @@ export default function WorkCalendar({ workerId, companyId }) {
     setPendingEdit(null);
     setEntryValue("");
     setSaveError("");
-
-    requestAnimationFrame(() => {
-      entryInputRef.current?.focus();
-    });
   }
 
   const title = new Date(ym.y, ym.m, 1).toLocaleDateString(
@@ -567,7 +579,25 @@ export default function WorkCalendar({ workerId, companyId }) {
         month={ym.m}
         selected={selected}
         byDate={byDate}
+        entryValue={entryValue}
+        onEntryValueChange={(value) => {
+          setEntryValue(value);
+          setSaveError("");
+        }}
+        canEditSelected={!selectedRecord || isEditingManual}
+        entryDisabled={saving || Boolean(pendingEdit)}
         onSelectDate={selectDate}
+        onSubmit={handleEntrySubmit}
+      />
+
+      <WorkMobileKeyboard
+        value={entryValue}
+        onChange={(value) => {
+          setEntryValue(value);
+          setSaveError("");
+        }}
+        onSubmit={handleEntrySubmit}
+        disabled={saving || Boolean(pendingEdit) || !selected || !(!selectedRecord || isEditingManual)}
       />
 
       {!loading && records.length === 0 && (
@@ -587,12 +617,8 @@ export default function WorkCalendar({ workerId, companyId }) {
         setSelectedRoleId={setSelectedRoleId}
         editRoleId={editRoleId}
         setEditRoleId={setEditRoleId}
+        roleSelectRef={roleSelectRef}
         entryValue={entryValue}
-        setEntryValue={(value) => {
-          setEntryValue(value);
-          setSaveError("");
-        }}
-        entryInputRef={entryInputRef}
         saving={saving}
         pendingEdit={pendingEdit}
         saveError={saveError}
@@ -600,15 +626,20 @@ export default function WorkCalendar({ workerId, companyId }) {
         onNavigateDate={navigateDate}
       />
 
-      {/* Confirmation for editing existing manual records */}
-      <div ref={confirmEditRef}>
-        <ConfirmWorkChange
-          pendingEdit={pendingEdit}
-          saving={saving}
-          onConfirm={confirmEdit}
-          onCancel={cancelEdit}
-        />
-      </div>
+      {/* Confirmation modal for editing manual work records */}
+      {pendingEdit && (
+        <Modal
+          title="Confirm record change"
+          onClose={cancelEdit}
+        >
+          <ConfirmWorkChange
+            pendingEdit={pendingEdit}
+            saving={saving}
+            onConfirm={confirmEdit}
+            onCancel={cancelEdit}
+          />
+        </Modal>
+      )}
 
       {/* Monthly summary */}
       <WorkSummary

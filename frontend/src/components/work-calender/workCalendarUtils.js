@@ -3,7 +3,7 @@ export const CELL_TONE = {
   WORKED: "bg-success-soft text-success",
   ABSENT: "bg-danger-soft text-danger",
   HOLIDAY: "bg-info-soft text-info",
-  WEEKLY_OFF: "bg-paper text-text-muted border border-border",
+  WEEKLY_OFF: "bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700/70",
 };
 
 export const SHORT = {

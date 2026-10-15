@@ -97,13 +97,14 @@ async function request(
       : null;
 
     if (!response.ok) {
-      throw new ApiError(
-        payload?.message ||
-          `Request failed with status ${response.status}`,
-        response.status,
-        payload?.errors
-      );
-    }
+  throw new ApiError(
+    payload?.error?.message ||
+      payload?.message ||
+      `Request failed with status ${response.status}`,
+    response.status,
+    payload?.error?.details || payload?.errors
+  );
+}
 
     return payload;
   })();

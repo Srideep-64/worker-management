@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import { AlertTriangle, CalendarDays, Info } from "lucide-react";
 
 import Modal from "../ui/Modal.jsx";
@@ -14,10 +14,43 @@ export default function ChangeWorkerStatusModal({
   onSaved,
 }) {
   const [leavingDate, setLeavingDate] = useState(
-    toDateInput(worker.leavingDate)
-  );
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+        toDateInput(worker.leavingDate)
+      );
+      const [error, setError] = useState("");
+      const [saving, setSaving] = useState(false);
+      const [latestWorkDate, setLatestWorkDate] = useState(
+      toDateInput(worker.latestWorkDate)
+    );
+
+    useEffect(() => {
+      let cancelled = false;
+
+      api
+        .get(`/workers/${worker.id}`)
+        .then(({ worker: details }) => {
+          if (!cancelled) {
+            setLatestWorkDate(
+              toDateInput(details.latestWorkDate)
+            );
+          }
+        })
+        .catch(() => {
+          // Backend validation remains the final safeguard.
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [worker.id]);
+
+    const minimumLeavingDate = [
+      toDateInput(worker.joiningDate),
+      latestWorkDate,
+    ]
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+  
 
   async function submit(e) {
     e.preventDefault();
@@ -25,6 +58,15 @@ export default function ChangeWorkerStatusModal({
 
     if (!leavingDate) {
       setError("Select a leaving date, or use Clear leaving date if the worker is staying.");
+      return;
+    }
+    if (
+      latestWorkDate &&
+      leavingDate < latestWorkDate
+    ) {
+      setError(
+        `Leaving date cannot be earlier than the latest work record (${latestWorkDate}).`
+      );
       return;
     }
 
@@ -122,7 +164,7 @@ export default function ChangeWorkerStatusModal({
               className="input pl-9"
               type="date"
               value={leavingDate}
-              min={toDateInput(worker.joiningDate) || undefined}
+              min={minimumLeavingDate || undefined}
               onChange={(e) => setLeavingDate(e.target.value)}
               required
             />
@@ -136,12 +178,6 @@ export default function ChangeWorkerStatusModal({
             <div className="space-y-2 text-sm text-text-muted">
               <p className="font-medium text-text">
                 When will the worker become inactive?
-              </p>
-
-              <p>
-                The worker remains active throughout the month
-                containing their leaving date. They become
-                inactive from the first day of the following month.
               </p>
 
               <p>

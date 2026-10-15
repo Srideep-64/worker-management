@@ -247,6 +247,21 @@ if (missingDays.length > 0) {
       }
 
       const workDate = new Date(Date.UTC(year, month, day));
+      const leavingDate = worker.leavingDate
+          ? isoDate(new Date(worker.leavingDate))
+          : null;
+
+        const requestedWorkDate = isoDate(workDate);
+
+        if (leavingDate && requestedWorkDate > leavingDate) {
+          errors.push({
+            sheet: "Sheet1",
+            row: rowNum,
+            field: `Day ${day}`,
+            message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
+          });
+          continue;
+        }
       const overrideRole = overrides.get(`${workerCode}|${isoDate(workDate)}`);
       const roleCode = overrideRole || baseRoleCode;
 
@@ -378,6 +393,21 @@ function parseFormatDaily(sheet, { periodDate, workersByCode, rolesByCode }) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "DATE", message: `Date ${isoDate(workDate)} is outside the selected month` });
       return;
     }
+    const leavingDate = worker.leavingDate
+  ? isoDate(new Date(worker.leavingDate))
+  : null;
+
+const requestedWorkDate = isoDate(workDate);
+
+if (leavingDate && requestedWorkDate > leavingDate) {
+  errors.push({
+    sheet: "Sheet1",
+    row: rowNum,
+    field: `Day ${day}`,
+    message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
+  });
+  return;
+}
 
     const dedupeKey = `${workerCode}|${isoDate(workDate)}`;
     if (seenWorkerDate.has(dedupeKey)) {

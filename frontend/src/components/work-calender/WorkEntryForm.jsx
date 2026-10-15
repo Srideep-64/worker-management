@@ -13,9 +13,8 @@ export default function WorkEntryForm({
   setSelectedRoleId,
   editRoleId,
   setEditRoleId,
+  roleSelectRef,
   entryValue,
-  setEntryValue,
-  entryInputRef,
   saving,
   pendingEdit,
   saveError,
@@ -31,7 +30,8 @@ export default function WorkEntryForm({
           <p className="font-semibold text-text">{selectedTitle}</p>
 
           <p className="mt-1 text-xs text-text-muted">
-            Use the arrow keys or the buttons to move between days.
+            Enter hours or A, H, or W directly in the selected calendar
+            cell. Use the arrow keys or buttons to move between days.
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export default function WorkEntryForm({
       {(!selectedRecord || isEditingManual) && (
         <form
           onSubmit={onSubmit}
-          className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+          className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div>
             <label
@@ -113,6 +113,7 @@ export default function WorkEntryForm({
             </label>
 
             <select
+              ref={roleSelectRef}
               id={`work-role-${workerId}`}
               className="input w-full"
               value={selectedRecord ? editRoleId : selectedRoleId}
@@ -137,46 +138,6 @@ export default function WorkEntryForm({
             </select>
           </div>
 
-          <div>
-            <label
-              htmlFor={`work-entry-${workerId}`}
-              className="mb-1 block text-xs font-medium text-text-muted"
-            >
-              {selectedRecord
-                ? "Replacement hours or status"
-                : "Hours or status"}
-            </label>
-
-            <input
-              ref={entryInputRef}
-              id={`work-entry-${workerId}`}
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              className="input w-full"
-              placeholder={
-                selectedRecord
-                  ? "Enter replacement value"
-                  : "e.g. 8, A, H, W"
-              }
-              value={entryValue}
-              onChange={(event) => setEntryValue(event.target.value)}
-              disabled={
-                saving ||
-                Boolean(pendingEdit) ||
-                (!selectedRecord && !selectedRoleId)
-              }
-              aria-describedby={`work-entry-help-${workerId}`}
-            />
-
-            <p
-              id={`work-entry-help-${workerId}`}
-              className="mt-1 text-xs text-text-muted"
-            >
-              A = Absent · H = Holiday · W = Weekly off
-            </p>
-          </div>
-
           <div className="flex items-end">
             <button
               type="submit"
@@ -199,9 +160,15 @@ export default function WorkEntryForm({
       )}
 
       {saveError && (
-        <p role="alert" className="text-sm text-danger">
-          {saveError}
-        </p>
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger"
+        >
+          {typeof saveError === "string"
+            ? saveError
+            : saveError.message || "Unable to save the work record."}
+        </div>
       )}
     </section>
   );

@@ -270,8 +270,23 @@ export const getWorker = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Worker not found");
   }
 
+  const latestWorkRecord = await prisma.workRecord.findFirst({
+    where: {
+      workerId: req.params.id,
+    },
+    orderBy: {
+      workDate: "desc",
+    },
+    select: {
+      workDate: true,
+    },
+  });
+
   res.json({
-    worker: withWorkerStatus(worker),
+    worker: {
+      ...withWorkerStatus(worker),
+      latestWorkDate: dateOnly(latestWorkRecord?.workDate),
+    },
   });
 });
 
@@ -313,8 +328,32 @@ export const updateWorker = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Worker not found");
   }
 
-  // companyId and workerCode are intentionally excluded from this schema.
-  // A null leavingDate clears the departure date.
+  // Reject a leaving date if any work record exists after it.
+  // This checks both manual attendance and uploaded timesheets.
+  if (data.leavingDate) {
+    const laterWorkRecord = await prisma.workRecord.findFirst({
+      where: {
+        workerId: req.params.id,
+        workDate: {
+          gt: data.leavingDate,
+        },
+      },
+      orderBy: {
+        workDate: "asc",
+      },
+      select: {
+        workDate: true,
+      },
+    });
+
+    if (laterWorkRecord) {
+      throw ApiError.badRequest(
+        `Leaving date cannot be earlier than an existing work record (${dateOnly(laterWorkRecord.workDate)}).`,
+      );
+    }
+  }
+
+  // A null leavingDate clears the leaving date.
   const worker = await prisma.worker.update({
     where: { id: req.params.id },
     data,

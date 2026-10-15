@@ -110,10 +110,37 @@ function isWorkerActive(worker) {
   return hasJoined && hasNotLeft;
 }
 
-function assertWorkerActive(worker) {
-  if (!isWorkerActive(worker)) {
+
+function assertWorkDateWithinEmployment(worker, workDate) {
+  const joiningDate = dateOnly(worker.joiningDate);
+  const leavingDate = dateOnly(worker.leavingDate);
+  const requestedWorkDate = dateOnly(workDate);
+
+  if (!requestedWorkDate) {
+    throw ApiError.badRequest("Invalid work date.");
+  }
+
+  if (joiningDate && requestedWorkDate < joiningDate) {
     throw ApiError.badRequest(
-      "This worker is inactive for the current date. New attendance entries and edits are not allowed.",
+      `Cannot add or edit a work record dated ${requestedWorkDate}. The worker's joining date is ${joiningDate}.`,
+    );
+  }
+
+  if (leavingDate && requestedWorkDate > leavingDate) {
+    throw ApiError.badRequest(
+      `Cannot add or edit a work record dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
+    );
+  }
+}
+
+
+function assertWorkDateNotAfterLeavingDate(worker, workDate) {
+  const leavingDate = dateOnly(worker.leavingDate);
+  const requestedWorkDate = dateOnly(workDate);
+
+  if (leavingDate && requestedWorkDate > leavingDate) {
+    throw ApiError.badRequest(
+      `Cannot add or edit a work record dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
     );
   }
 }
@@ -288,9 +315,7 @@ export const createManualWork = asyncHandler(async (req, res) => {
     throw ApiError.notFound("Worker not found");
   }
 
-  // Status is calculated from joiningDate and leavingDate,
-  // not from a manually stored isActive flag.
-  assertWorkerActive(worker);
+  assertWorkDateWithinEmployment(worker, workDate);
 
   validateWorkStatus({ status, hours });
 
@@ -393,7 +418,7 @@ export const updateManualWork = asyncHandler(async (req, res) => {
     throw ApiError.notFound("Worker not found");
   }
 
-  assertWorkerActive(worker);
+  assertWorkDateWithinEmployment(worker, existing.workDate);
 
   validateWorkStatus({ status, hours });
 
