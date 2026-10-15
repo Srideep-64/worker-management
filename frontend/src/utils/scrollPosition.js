@@ -31,22 +31,44 @@ export function useRestoreScrollPosition(path, ready = true) {
 
     if (savedPosition === null) return;
 
-    let firstFrame;
-    let secondFrame;
+    const targetPosition = Number(savedPosition);
+    let animationFrame;
+    let startTime;
 
-    firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => {
-        const container = getScrollContainer();
+    const duration = 350;
 
-        if (container) {
-          container.scrollTop = Number(savedPosition);
-        }
-      });
-    });
+    function animateScroll(timestamp) {
+      const container = getScrollContainer();
+
+      if (!container) return;
+
+      if (startTime === undefined) {
+        startTime = timestamp;
+      }
+
+      const progress = Math.min(
+        (timestamp - startTime) / duration,
+        1
+      );
+
+      // Ease-out cubic: fast at first, then gently slows down.
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+      container.scrollTop =
+        container.scrollTop +
+        (targetPosition - container.scrollTop) * easedProgress;
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animateScroll);
+      } else {
+        container.scrollTop = targetPosition;
+      }
+    }
+
+    animationFrame = requestAnimationFrame(animateScroll);
 
     return () => {
-      cancelAnimationFrame(firstFrame);
-      cancelAnimationFrame(secondFrame);
+      cancelAnimationFrame(animationFrame);
     };
   }, [path, location.key, location.state?.restoreScroll, ready]);
 }

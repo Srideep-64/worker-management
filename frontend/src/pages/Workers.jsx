@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Plus, Search, Users, RefreshCw } from "lucide-react";
+import { Link, useLocation} from "react-router-dom";
+import { Plus, Search, Users, RefreshCw, ChevronLeft } from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -129,6 +129,14 @@ export default function Workers() {
   const totalWorkers = pagination?.total ?? workers.length;
 
   return (
+    <> 
+      <Link
+        to="/"
+        className="mb-3 inline-flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-accent"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Dashboard
+      </Link>
     <Card
       title="Workers"
       action={
@@ -348,5 +356,6 @@ export default function Workers() {
         />
       )}
     </Card>
+    </>
   );
 }

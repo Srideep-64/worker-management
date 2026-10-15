@@ -172,92 +172,92 @@ export default function Dashboard() {
   await reload();
 }
 
-  return (
-    <div className="space-y-6">
-      {/* Dashboard heading */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-text">
-          Dashboard
-        </h1>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleRefresh}
-            disabled={loading || refreshing}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                refreshing ? "animate-spin" : ""
-              }`}
-            />
-            Refresh
-          </button>
+return (
+  <div className="space-y-6">
+    {/* Dashboard heading */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-xl font-semibold text-text">
+        Dashboard
+      </h1>
 
-          <button
-            type="button"
-            className="btn-accent"
-            onClick={() => setAddingWorker(true)}
-            disabled={loading || companies.length === 0}
-            title={
-              companies.length === 0
-                ? "Add a company before creating a worker"
-                : undefined
-            }
-          >
-            <UserPlus className="h-4 w-4" />
-            Add worker
-          </button>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={handleRefresh}
+        disabled={loading || refreshing}
+      >
+        <RefreshCw
+          className={`h-4 w-4 ${
+            refreshing ? "animate-spin" : ""
+          }`}
+        />
+        Refresh
+      </button>
+    </div>
 
-          <button
-            type="button"
-            className="btn-accent"
-            onClick={() => setAdding(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Add company
-          </button>
-        </div>
+    {error && (
+      <div
+        role="alert"
+        className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
+      >
+        {error.message || "Failed to load dashboard data."}
       </div>
+    )}
 
-      {error && (
-        <div
-          role="alert"
-          className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
-        >
-          {error.message || "Failed to load dashboard data."}
-        </div>
-      )}
-
-      {failedSections.length > 0 && (
-        <div
-          role="status"
-          className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
-        >
-          Could not load: {failedSections.join(", ")}. Try refreshing.
-        </div>
-      )}
+    {failedSections.length > 0 && (
+      <div
+        role="status"
+        className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+      >
+        Could not load: {failedSections.join(", ")}. Try refreshing.
+      </div>
+    )}
 
     {/* Overall totals */}
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <StatCard
-        label="Total companies"
-        value={loading ? "…" : data?.companiesCount ?? "—"}
-        icon={Building2}
-      />
+  label="Total companies"
+  value={loading ? "…" : data?.companiesCount ?? "—"}
+  icon={Building2}
+  action={
+    <button
+      type="button"
+      className="btn-secondary w-full"
+      onClick={() => setAdding(true)}
+    >
+      <Plus className="mr-2 inline h-4 w-4" />
+      Add company
+    </button>
+  }
+/>
 
-      <Link
-        to="/workers"
-        className="group block overflow-hidden rounded-xl border border-border bg-surface transition-colors hover:border-accent hover:bg-surface focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
-        aria-label="View active workers"
+<Link
+  to="/workers"
+  className="group block rounded-xl focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+  aria-label="View active workers"
+>
+  <StatCard
+    label="Active workers"
+    value={loading ? "…" : data?.workersCount ?? "—"}
+    icon={Users}
+    action={
+      <button
+        type="button"
+        className="btn-secondary w-full"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setAddingWorker(true);
+        }}
+        disabled={loading || !companies?.length}
       >
-        <StatCard
-          label="Active workers"
-          value={loading ? "…" : data?.workersCount ?? "—"}
-          icon={Users}
-        />
-      </Link>
+        <Plus className="mr-2 inline h-4 w-4" />
+        Add worker
+      </button>
+    }
+  />
+</Link>
     </div>
 
       {/* Monthly company cards */}
@@ -268,7 +268,7 @@ export default function Dashboard() {
           </h2>
 
           <p className="mt-1 text-sm text-text-muted">
-              {formatMonth(month)} Overview | Overall work hours and Report downloads
+              {formatMonth(month)} Work hours and Report downloads
           </p>
         </div>
 
