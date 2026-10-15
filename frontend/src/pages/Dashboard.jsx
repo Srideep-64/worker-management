@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Building2,
-  Plus,
   Users,
   UserPlus,
   RefreshCw,
+  BuildingComplexPlus
 } from "lucide-react";
 
 import CompanyMonthlyCard from "../components/dashboard/CompanyMonthlyCard.jsx";
@@ -215,7 +215,7 @@ return (
     )}
 
     {/* Overall totals */}
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
       <StatCard
   label="Total companies"
   value={loading ? "…" : data?.companiesCount ?? "—"}
@@ -223,10 +223,10 @@ return (
   action={
     <button
       type="button"
-      className="btn-secondary w-full"
+      className=" w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
       onClick={() => setAdding(true)}
     >
-      <Plus className="mr-2 inline h-4 w-4" />
+      <BuildingComplexPlus className="mr-2 inline h-4 w-4" />
       Add company
     </button>
   }
@@ -244,7 +244,7 @@ return (
     action={
       <button
         type="button"
-        className="btn-secondary w-full"
+        className="w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -252,7 +252,7 @@ return (
         }}
         disabled={loading || !companies?.length}
       >
-        <Plus className="mr-2 inline h-4 w-4" />
+        <UserPlus className="mr-2 inline h-4 w-4" />
         Add worker
       </button>
     }
@@ -283,7 +283,7 @@ return (
             description="Add your first company to start managing its workers."
           />
         ) : (
-          <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {companies.map((company) => (
               <CompanyMonthlyCard
                 key={company.id}

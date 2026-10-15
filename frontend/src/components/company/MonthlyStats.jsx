@@ -4,6 +4,10 @@ import {
   FileSpreadsheet,
   FileText,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  
 } from "lucide-react";
 
 import EmptyState from "../ui/EmptyState.jsx";
@@ -149,108 +153,104 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
   return (
     <div className="space-y-4">
 
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <label
-          htmlFor="stats-month"
-          className="mb-1 block text-sm font-medium text-text"
-        >
-          Reporting month
-        </label>
+<div className="flex flex-wrap items-center justify-between gap-4">
+  {/* Left: Reporting month and navigation */}
+  <div className="flex flex-wrap items-center gap-3">
+    <label
+      htmlFor="stats-month"
+      className="text-sm font-medium text-text whitespace-nowrap leading-none"
+    >
+      Reporting month
+    </label>
 
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="btn-secondary px-2 min-w-0"
+        aria-label="Previous month"
+        onClick={() => {
+          const [year, monthNumber] = month.split("-").map(Number);
+          const date = new Date(year, monthNumber - 2, 1);
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary px-2 min-w-0"
-            aria-label="Previous month"
-            onClick={() => {
-              const [year, monthNumber] = month.split("-").map(Number);
-              const date = new Date(year, monthNumber - 2, 1);
+          setMonth(
+            `${date.getFullYear()}-${String(
+              date.getMonth() + 1
+            ).padStart(2, "0")}`
+          );
+        }}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
 
-              setMonth(
-                `${date.getFullYear()}-${String(
-                  date.getMonth() + 1
-                ).padStart(2, "0")}`
-              );
-            }}
-          >
-            Previous
-          </button>
+      <input
+        id="stats-month"
+        type="month"
+        aria-label="Select month"
+        className="btn-secondary px-2 min-w-0"
+        value={month}
+        onChange={(event) => {
+          if (event.target.value) {
+            setMonth(event.target.value);
+          }
+        }}
+      />
 
-          <input
-            type="month"
-            aria-label="Select month"
-            className="btn-secondary px-2 min-w-0"
-            value={month}
-            onChange={(event) => {
-              if (event.target.value) {
-                setMonth(event.target.value);
-              }
-            }}
-          />
+      <button
+        type="button"
+        className="btn-secondary px-2 min-w-0"
+        aria-label="Next month"
+        onClick={() => {
+          const [year, monthNumber] = month.split("-").map(Number);
+          const date = new Date(year, monthNumber, 1);
 
-          <button
-            type="button"
-            className="btn-secondary px-2 min-w-0"
-            aria-label="Next month"
-            onClick={() => {
-              const [year, monthNumber] = month.split("-").map(Number);
-              const date = new Date(year, monthNumber, 1);
-
-              setMonth(
-                `${date.getFullYear()}-${String(
-                  date.getMonth() + 1
-                ).padStart(2, "0")}`
-              );
-            }}
-          >
-            Next
-          </button>
-        </div>
-
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="btn-secondary px-2 min-w-0 gap-1"
-          onClick={async () => {
-            invalidateMonthlyStats(companyId, month);
-            setForceRefresh(true);
-          }}
-          disabled={loading}
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={Boolean(downloading)}
-          onClick={() => handleDownload("excel")}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          {downloading === "excel"
-            ? "Downloading Excel..."
-            : "Download Excel"}
-        </button>
-
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={Boolean(downloading)}
-          onClick={() => handleDownload("pdf")}
-        >
-          <FileText className="h-4 w-4" />
-          {downloading === "pdf"
-            ? "Downloading PDF..."
-            : "Download PDF"}
-        </button>
-      </div>
+          setMonth(
+            `${date.getFullYear()}-${String(
+              date.getMonth() + 1
+            ).padStart(2, "0")}`
+          );
+        }}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
     </div>
+  </div>
 
+  {/* Right: Refresh and downloads */}
+  <div className="flex flex-wrap items-center gap-2">
+    <button
+      type="button"
+      className="btn-secondary px-2 min-w-0 gap-1"
+      onClick={async () => {
+        invalidateMonthlyStats(companyId, month);
+        setForceRefresh(true);
+      }}
+      disabled={loading}
+    >
+      <RefreshCw className="h-4 w-4" />
+      Refresh
+    </button>
+
+    <button
+      type="button"
+      className="btn-secondary"
+      disabled={Boolean(downloading)}
+      onClick={() => handleDownload("excel")}
+    >
+      <FileSpreadsheet className="h-4 w-4" />
+      {downloading === "excel" ? "Downloading..." : " Excel"}
+    </button>
+
+    <button
+      type="button"
+      className="btn-secondary"
+      disabled={Boolean(downloading)}
+      onClick={() => handleDownload("pdf")}
+    >
+      <FileText className="h-4 w-4" />
+      {downloading === "pdf" ? "Downloading..." : "PDF"}
+    </button>
+  </div>
+</div>
     {downloadError && (
       <p role="alert" className="text-sm text-danger">
         {downloadError}

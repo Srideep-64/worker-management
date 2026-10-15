@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, RefreshCw } from "lucide-react";
+import { Users, RefreshCw,ChevronLeft,ChevronRight } from "lucide-react";
 
 import EmptyState from "../ui/EmptyState.jsx";
 import { api } from "../../api/client.js";
@@ -100,73 +100,79 @@ export default function WorkersTab({
     setWorkersRefreshKey((key) => key + 1);
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-text">
-          Monthly worker attendance
-        </p>
+return (
+<div className="space-y-4">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+    {/* Left: Title and month navigation */}
+    <div className="flex flex-wrap items-center gap-3">
+      <p className="text-sm font-medium text-text whitespace-nowrap">
+        Worker Attendance
+      </p>
 
-        <select
-          aria-label="Filter workers by status"
-          className="input w-auto"
-          value={workerStatus}
-          onChange={(event) => {
-            setWorkerStatus(event.target.value);
-            setPage(1);
-          }}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn-secondary min-w-0 px-2"
+          aria-label="Previous month"
+          onClick={() => changeMonth(-1)}
         >
-          <option value="ACTIVE">Active workers</option>
-          <option value="INACTIVE">Inactive workers</option>
-          <option value="ALL">All workers</option>
-        </select>
+          <ChevronLeft className="h-4 w-4" />
+        </button>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-secondary min-w-0 px-2"
-              onClick={() => changeMonth(-1)}
-            >
-              Previous
-            </button>
+        <input
+          type="month"
+          aria-label="Select month"
+          className="input w-auto"
+          value={month}
+          onChange={(event) => {
+            if (event.target.value) setMonth(event.target.value);
+          }}
+        />
 
-            <input
-              type="month"
-              aria-label="Select month"
-              className="input w-auto"
-              value={month}
-              onChange={(event) => {
-                if (event.target.value) setMonth(event.target.value);
-              }}
-            />
-
-            <button
-              type="button"
-              className="btn-secondary min-w-0 px-2"
-              onClick={() => changeMonth(1)}
-            >
-              Next
-            </button>
-          </div>
-
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn-secondary min-w-0 px-2"
+          aria-label="Next month"
+          onClick={() => changeMonth(1)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
+    </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error.message || "Unable to load worker statistics."}
-        </p>
-      )}
+    {/* Right: Refresh and worker status */}
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={handleRefresh}
+        disabled={loading}
+      >
+        <RefreshCw className="h-4 w-4" />
+        Refresh
+      </button>
+
+      <select
+        aria-label="Filter workers by status"
+        className="input w-auto"
+        value={workerStatus}
+        onChange={(event) => {
+          setWorkerStatus(event.target.value);
+          setPage(1);
+        }}
+      >
+        <option value="ACTIVE">Active workers</option>
+        <option value="INACTIVE">Inactive workers</option>
+        <option value="ALL">All workers</option>
+      </select>
+    </div>
+  </div>
+
+  {error && (
+    <p role="alert" className="text-sm text-danger">
+      {error.message || "Unable to load worker statistics."}
+    </p>
+  )}
 
       <div className="overflow-x-auto">
         {workers.length === 0 ? (
