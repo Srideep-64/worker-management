@@ -271,15 +271,17 @@ export default function WorkerProfile() {
           onWorkUpdated={notifyWorkUpdated}
         />
       </Card>
-
-      {/* Work summary */}
+</div>
+    {/* Summary cards */}
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-1 lg:grid-cols-2">
+      <div> 
       <WorkSummary
         workerId={worker.id}
         month={selectedMonth}
         refreshKey={workRefreshKey}
       />
-
-      {/* Payroll summary */}
+      </div>
+        <div> 
       <PayrollSummary
         workerId={worker.id}
         companyId={worker.companyId}
@@ -287,6 +289,8 @@ export default function WorkerProfile() {
         refreshKey={workRefreshKey}
       />
       </div>
+    </div>
+      
 
       {editing && (
         <EditWorkerModal

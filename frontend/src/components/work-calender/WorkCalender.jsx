@@ -616,98 +616,102 @@ async function confirmUpload() {
     <div className="space-y-5">
       {/* Month navigation and status legend */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 border border-[#007AFF] bg-[#007AFF] text-white hover:opacity-90 dark:border-[#0A84FF] dark:bg-[#0A84FF] rounded-md px-3 py-2"
-          onClick={() => {
-            if (pendingCount > 0) {
-              setShowUploadConfirm(true);
-              setSaveError("");
-            }
-          }}
-          disabled={saving || pendingCount === 0}
-          title="Review and upload pending attendance records"
-        >
-          <Upload className="h-4 w-4" />
-          Upload records
-          {pendingCount > 0 && (
-            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
-              {pendingCount}
-            </span>
-          )}
-        </button>
+  {/* Upload records */}
+  <button
+    type="button"
+    className="inline-flex items-center gap-2 rounded-md border border-[#007AFF] bg-[#007AFF] px-3 py-2 text-white hover:opacity-90 dark:border-[#0A84FF] dark:bg-[#0A84FF]"
+    onClick={() => {
+      if (pendingCount > 0) {
+        setShowUploadConfirm(true);
+        setSaveError("");
+      }
+    }}
+    disabled={saving || pendingCount === 0}
+    title="Review and upload pending attendance records"
+  >
+    <Upload className="h-4 w-4" />
+    Upload records
+    {pendingCount > 0 && (
+      <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
+        {pendingCount}
+      </span>
+    )}
+  </button>
+    {/* Month navigation + Refresh — grouped towards the right */}
+  <div className="flex flex-wrap items-center gap-2">
+       <button
+      type="button"
+      className="btn-secondary inline-flex items-center gap-2"
+      onClick={handleRefresh}
+      disabled={refreshing}
+      title="Refresh work records and payroll"
+    >
+      <RefreshCw
+        className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+      />
+      {refreshing ? "Refreshing…" : "Refresh"}
+    </button>
+    <button
+      type="button"
+      className="btn-secondary"
+      onClick={() => shiftMonth(-1)}
+      aria-label="Previous month"
+    >
+      <ChevronLeft className="h-4 w-4" />
+    </button>
 
-        <button
-          type="button"
-          className="btn-secondary inline-flex items-center gap-2"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          title="Refresh work records and payroll"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-          />
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
-        <label className="flex items-center gap-2 text-sm text-text-muted">
-          <span className="sr-only">Role for selected date</span>
-          <select
-            ref={roleSelectRef}
-            aria-label="Role for selected date"
-            className="input min-w-0 max-w-52"
-            value={roleControlValue}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (selectedRecord || selectedDraft) {
-                setEditRoleId(value);
-              } else {
-                setSelectedRoleId(value);
-              }
-              setSaveError("");
-            }}
-            disabled={roleControlDisabled}
-          >
-            <option value="">Select role</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.code} — {role.name}
-              </option>
-            ))}
-          </select>
-        </label>
+    <span className="w-36 text-center text-sm font-semibold text-text">
+      {title}
+    </span>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
+    <button
+      type="button"
+      className="btn-secondary"
+      onClick={() => shiftMonth(1)}
+      aria-label="Next month"
+    >
+      <ChevronRight className="h-4 w-4" />
+    </button>
 
-          <span className="w-36 text-center text-sm font-semibold text-text">
-            {title}
-          </span>
+  </div>
+  {/* Role selector — moved before month navigation */}
+  <label className="flex items-center gap-2 text-sm text-text-muted">
+    <span className="sr-only">Role for selected date</span>
+    <select
+      ref={roleSelectRef}
+      aria-label="Role for selected date"
+      className="input min-w-0 max-w-52"
+      value={roleControlValue}
+      onChange={(event) => {
+        const value = event.target.value;
 
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => shiftMonth(1)}
-            aria-label="Next month"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        if (selectedRecord || selectedDraft) {
+          setEditRoleId(value);
+        } else {
+          setSelectedRoleId(value);
+        }
 
-        <div className="hidden flex-wrap items-center gap-2 text-xs text-text-muted sm:flex">
-          <Badge status="WORKED">Worked</Badge>
-          <Badge status="ABSENT">Absent</Badge>
-          <Badge status="HOLIDAY">Holiday</Badge>
-          <Badge status="WEEKLY_OFF">Weekly off</Badge>
-        </div>
-      </div>
+        setSaveError("");
+      }}
+      disabled={roleControlDisabled}
+    >
+      <option value="">Select role</option>
+      {roles.map((role) => (
+        <option key={role.id} value={role.id}>
+          {role.code} — {role.name}
+        </option>
+      ))}
+    </select>
+  </label>
+
+  {/* Status legend */}
+  <div className="hidden flex-wrap items-center gap-2 text-xs text-text-muted sm:flex">
+    <Badge status="WORKED">Worked</Badge>
+    <Badge status="ABSENT">Absent</Badge>
+    <Badge status="HOLIDAY">Holiday</Badge>
+    <Badge status="WEEKLY_OFF">Weekly off</Badge>
+  </div>
+</div>
 
       {/* API errors */}
       {error && (
