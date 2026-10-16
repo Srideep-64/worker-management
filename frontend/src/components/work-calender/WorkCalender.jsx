@@ -651,28 +651,29 @@ async function confirmUpload() {
       />
       {refreshing ? "Refreshing…" : "Refresh"}
     </button>
+    <div  className="inline-flex items-center gap-1 whitespace-nowrap">
     <button
       type="button"
-      className="btn-secondary"
+      className="btn-secondary shrink-0"
       onClick={() => shiftMonth(-1)}
       aria-label="Previous month"
     >
       <ChevronLeft className="h-4 w-4" />
     </button>
 
-    <span className="w-36 text-center text-sm font-semibold text-text">
+    <span className="w-36 shrink-0 text-center text-sm font-semibold text-text">
       {title}
     </span>
 
     <button
       type="button"
-      className="btn-secondary"
+      className="btn-secondary shrink-0"
       onClick={() => shiftMonth(1)}
       aria-label="Next month"
     >
       <ChevronRight className="h-4 w-4" />
     </button>
-
+  </div>
   </div>
   {/* Role selector — moved before month navigation */}
   <label className="flex items-center gap-2 text-sm text-text-muted">
