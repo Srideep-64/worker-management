@@ -98,7 +98,7 @@ export default function WorkSummary({ workerId,month,refreshKey, }) {
   const absentDays = Number(summary.absentDays ?? 0);
 
   return (
-    <section className="space-y-4 rounded-lg border border-border p-4">
+    <section className="space-y-4 rounded-lg bg-surface border border-border p-4">
       <h3 className="text-sm font-semibold text-text">
         Work Summary
       </h3>

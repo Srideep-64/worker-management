@@ -35,7 +35,7 @@ function getValidationErrors(error) {
 
 function UploadModal({ companies, onClose, onDone }) {
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? "");
-  const [periodMonth, setPeriodMonth] = useState("");
+  const [periodMonth, setPeriodMonth] = useState(getPreviousUaeMonth);
   const [file, setFile] = useState(null);
 
   const [step, setStep] = useState("form");
@@ -121,6 +121,30 @@ function UploadModal({ companies, onClose, onDone }) {
       setBusy(false);
     }
   }
+    function getPreviousUaeMonth() {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Dubai",
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(new Date());
+
+    const values = Object.fromEntries(
+      parts.map(({ type, value }) => [type, value]),
+    );
+
+    const currentMonth = new Date(
+      Number(values.year),
+      Number(values.month) - 1,
+      1,
+    );
+
+    currentMonth.setMonth(currentMonth.getMonth() - 1);
+
+    const year = currentMonth.getFullYear();
+    const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
+
+    return `${year}-${month}`;
+  }
 
   return (
     <Modal
@@ -154,19 +178,28 @@ function UploadModal({ companies, onClose, onDone }) {
             </div>
 
             <div>
-              <label className="label" htmlFor="timesheet-month">
-                Month
-              </label>
+            <label className="label" htmlFor="timesheet-month">
+              Month
+            </label>
 
-              <input
-                id="timesheet-month"
-                type="month"
-                className="input"
-                value={periodMonth}
-                onChange={(event) => setPeriodMonth(event.target.value)}
-                required
-              />
-            </div>
+            <input
+              id="timesheet-month"
+              type="month"
+              className="input"
+              value={periodMonth}
+              max={new Intl.DateTimeFormat("en-CA", {
+                timeZone: "Asia/Dubai",
+                year: "numeric",
+                month: "2-digit",
+              })
+                .formatToParts(new Date())
+                .filter(({ type }) => type === "year" || type === "month")
+                .map(({ type, value }) => (type === "year" ? value : `-${value}`))
+                .join("")}
+              onChange={(event) => setPeriodMonth(event.target.value)}
+              required
+            />
+          </div>
           </div>
 
           <div>

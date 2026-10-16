@@ -93,11 +93,7 @@ export default function CompanyMonthlyCard({ company, month }) {
     [company.id, month]
   );
 
-  const workerCount =
-    company.workerCount ??
-    company._count?.workers ??
-    company.totalWorkers ??
-    "—";
+  const workerCount = company.activeWorkerCount ?? "—";
 
   const totalHours = data?.summary?.totalHours ?? 0;
   const payroll = data?.payrollSummary;
@@ -141,7 +137,7 @@ export default function CompanyMonthlyCard({ company, month }) {
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div>
-          <p className="text-sm text-text-muted">Workers</p>
+          <p className="text-sm text-text-muted">Active Workers</p>
           <p className="font-semibold text-text">{workerCount}</p>
         </div>
 

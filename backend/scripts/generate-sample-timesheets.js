@@ -1,5 +1,5 @@
 // Generates the two sample Excel workbooks used to exercise the importer,
-// matching the workers/clients/roles the seed script creates. Run with:
+// matching the workers/roles the seed script creates. Run with:
 //   node scripts/generate-sample-timesheets.js
 // Outputs to backend/samples/.
 
@@ -20,7 +20,6 @@ const wideHeader = [
   "WORKER_ID",
   "NAME",
   "ROLE",
-  "CLIENT_ID",
   ...Array.from({ length: 31 }, (_, i) => i + 1),
 ];
 
@@ -93,7 +92,6 @@ XLSX.writeFile(
 const dailyHeader = [
   "WORKER_ID",
   "NAME",
-  "CLIENT_ID",
   "DATE",
   "ROLE",
   "HOURS",

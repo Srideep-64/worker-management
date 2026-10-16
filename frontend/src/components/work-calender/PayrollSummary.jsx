@@ -305,7 +305,7 @@ export default function PayrollSummary({
   const remainingPay = payroll?.remainingPay ?? null;
 
   return (
-    <section className="rounded-lg border border-border p-4">
+    <section className="rounded-lg bg-surface border border-border p-4">
       {/* Collapsible header */}
       <div className="flex items-center justify-between gap-3">
         <div>

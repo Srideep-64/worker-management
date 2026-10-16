@@ -215,7 +215,7 @@ export default function Documents() {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-text-muted">
                 Showing {(page - 1) * PAGE_SIZE + 1}–
-                {Math.min(page * PAGE_SIZE, items.length+PAGE_SIZE)} of {items.length} documents
+                {Math.min(page * PAGE_SIZE, items.length)} of {items.length} documents
               </p>
 
               <div className="flex items-center gap-2">

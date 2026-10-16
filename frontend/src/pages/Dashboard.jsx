@@ -56,69 +56,42 @@ function invalidateDashboardCache() {
   dashboardStatsCache = null;
 }
 
+
 async function fetchDashboardData() {
   if (dashboardStatsCache) {
     return dashboardStatsCache;
   }
 
-  const [companiesResult, workersResult] = await Promise.allSettled([
-    (async () => {
-      const cached = getCachedCompanies();
+  const cached = getCachedCompanies();
 
-      if (cached) return cached;
+  const companiesData = cached ?? await api.get("/companies");
 
-      const response = await api.get("/companies");
-      setCachedCompanies(response);
-
-      return response;
-    })(),
-
-    api.get(`/workers?page=1&pageSize=1&month=${new Date().getFullYear()}-${String(
-  new Date().getMonth() + 1
-).padStart(2, "0")}&status=ACTIVE`),
-  ]);
-
-  const failedSections = [];
-
-  let companiesData = { companies: [] };
-  let workersData = { workers: [], pagination: null };
-
-  if (companiesResult.status === "fulfilled") {
-    companiesData = companiesResult.value;
-  } else {
-    failedSections.push("Companies");
+  if (!cached) {
+    setCachedCompanies(companiesData);
   }
 
-  if (workersResult.status === "fulfilled") {
-    workersData = workersResult.value;
-  } else {
-    failedSections.push("Workers");
-  }
+  const companies = companiesData.companies || [];
 
   const result = {
-    companies: companiesData.companies || [],
-
+    companies,
     companiesCount:
       companiesData.pagination?.total ??
       companiesData.pagination?.totalCount ??
-      companiesData.companies?.length ??
-      0,
+      companies.length,
 
-    workersCount:
-      workersData.pagination?.total ??
-      workersData.pagination?.totalCount ??
-      workersData.workers?.length ??
-      0,
+    workersCount: companies.reduce(
+      (total, company) =>
+        total + Number(company.activeWorkerCount ?? 0),
+      0
+    ),
 
-    failedSections,
+    failedSections: [],
   };
 
-  if (failedSections.length === 0) {
-    dashboardStatsCache = result;
-  }
-
+  dashboardStatsCache = result;
   return result;
 }
+
 
 // Main Dashboard
 export default function Dashboard() {

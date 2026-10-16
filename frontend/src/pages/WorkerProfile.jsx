@@ -20,6 +20,7 @@ import {
 } from "../utils/profileCache.js";
 
 import { invalidateCompanyWorkers } from "../utils/companyDetailCache.js";
+import WorkerPdfDownload from "../components/worker/WorkerPdfDownload.jsx";
 
 function Field({ label, value }) {
   return (
@@ -203,6 +204,11 @@ export default function WorkerProfile() {
             <CalendarClock className="h-4 w-4" />
             Change status
           </button>
+
+          <WorkerPdfDownload
+            workerId={worker.id}
+            workerCode={worker.workerCode}
+          />
         </div>
 
         </div>

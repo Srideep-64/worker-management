@@ -60,14 +60,16 @@ export default function WorkCalendar({ workerId, companyId, onMonthChange, onWor
   const today = dateKey(new Date());
 
   const [ym, setYm] = useState(() => {
-    const now = new Date();
+    const previousMonth = new Date();
+    previousMonth.setDate(1);
+    previousMonth.setMonth(previousMonth.getMonth() - 1);
 
     return {
-      y: now.getFullYear(),
-      m: now.getMonth(),
+      y: previousMonth.getFullYear(),
+      m: previousMonth.getMonth(),
     };
   });
-
+  
   const [selected, setSelected] = useState(today);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [editRoleId, setEditRoleId] = useState("");

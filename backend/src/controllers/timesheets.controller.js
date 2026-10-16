@@ -27,6 +27,30 @@ function periodMonthToDate(str) {
   return new Date(Date.UTC(y, m - 1, 1));
 }
 
+function getUaeCurrentMonth() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Dubai",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts.map(({ type, value }) => [type, value]),
+  );
+
+  return `${values.year}-${values.month}`;
+}
+
+function assertPeriodMonthNotInFuture(periodMonth) {
+  const currentMonth = getUaeCurrentMonth();
+
+  if (periodMonth > currentMonth) {
+    throw ApiError.badRequest(
+      `Cannot upload a timesheet for a future reporting month (${periodMonth}). The current UAE reporting month is ${currentMonth}.`,
+    );
+  }
+}
+
 // Loads everything the parser needs to resolve business identifiers
 // (worker_code, role code) to database IDs, scoped so a
 // worker from a different company can never silently match by code.
@@ -38,7 +62,8 @@ async function loadValidationContext(companyId) {
         id: true,
         workerCode: true,
         name: true,
-        isActive:true,
+        joiningDate: true,
+        leavingDate: true,
       },
     }),
 
@@ -111,6 +136,8 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
   if (!req.file) throw ApiError.badRequest("An .xlsx/.xls file is required (field name 'file')");
   const { companyId, periodMonth } = req.body;
 
+  assertPeriodMonthNotInFuture(periodMonth);
+
   const company = await prisma.company.findUnique({ where: { id: companyId } });
   if (!company) throw ApiError.badRequest("companyId does not reference an existing company");
 
@@ -172,6 +199,10 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
   if (upload.status !== "PROCESSING") {
     throw ApiError.conflict(`This upload is already ${upload.status.toLowerCase()} and cannot be confirmed again`);
   }
+  // Revalidate the reporting month before importing records.
+  const periodMonth = upload.periodMonth.toISOString().slice(0, 7);
+
+  assertPeriodMonthNotInFuture(periodMonth);
 
   const context = await loadValidationContext(upload.companyId);
   const fileBuffer = await readFile(upload.storageKey);

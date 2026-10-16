@@ -32,6 +32,8 @@ import {
   createAdvanceSchema,
 } from "../controllers/payroll.controller.js";
 
+import { downloadWorkerPdf } from "../controllers/workerPdf.controller.js";
+
 import { validate } from "../middleware/validate.js";
 
 const router = Router();
@@ -105,5 +107,7 @@ router.post(
   validate({ body: createManualWorkBatchSchema }),
   createManualWorkBatch,
 );
+
+router.get("/workers/:id/pdf", downloadWorkerPdf);
 
 export default router;
