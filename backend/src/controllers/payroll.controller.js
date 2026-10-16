@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { monthSchema } from "../utils/dates.js";
+import { calculatePayroll } from "../utils/payroll.js";
 
 export const payrollMonthSchema = z.object({
   month: monthSchema,
@@ -27,6 +28,7 @@ function monthStartDate(month) {
 }
 
 // GET /api/workers/:id/payroll?month=YYYY-MM
+
 export const getWorkerPayroll = asyncHandler(async (req, res) => {
   const worker = await prisma.worker.findUnique({
     where: { id: req.params.id },
@@ -39,53 +41,103 @@ export const getWorkerPayroll = asyncHandler(async (req, res) => {
 
   const month = req.query.month;
   const payrollMonth = monthStartDate(month);
+  const nextMonth = new Date(
+    Date.UTC(
+      payrollMonth.getUTCFullYear(),
+      payrollMonth.getUTCMonth() + 1,
+      1,
+    ),
+  );
 
-  const [monthlyPayroll, advances] = await Promise.all([
-    prisma.workerPayroll.findUnique({
-      where: {
-        workerId_payrollMonth: {
+  const [monthlyPayroll, advances, workRecords] =
+    await Promise.all([
+      prisma.workerPayroll.findUnique({
+        where: {
+          workerId_payrollMonth: {
+            workerId: worker.id,
+            payrollMonth,
+          },
+        },
+        select: { hourlyRate: true },
+      }),
+
+      prisma.advancePayment.findMany({
+        where: {
           workerId: worker.id,
           payrollMonth,
         },
-      },
-      select: { hourlyRate: true },
-    }),
-
-    prisma.advancePayment.findMany({
-    where: {
-        workerId: worker.id,
-        payrollMonth,
-    },
-    orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
-    include: {
-        createdBy: {
-        select: { name: true },
+        orderBy: [
+          { paidAt: "asc" },
+          { createdAt: "asc" },
+        ],
+        include: {
+          createdBy: {
+            select: { name: true },
+          },
         },
-    },
-    }),
-  ]);
+      }),
+
+      prisma.workRecord.findMany({
+        where: {
+          workerId: worker.id,
+          workDate: {
+            gte: payrollMonth,
+            lt: nextMonth,
+          },
+        },
+        select: {
+          status: true,
+          hours: true,
+        },
+      }),
+    ]);
+
+  const totalHours = workRecords.reduce(
+    (sum, record) =>
+      sum +
+      (record.status === "WORKED"
+        ? Number(record.hours ?? 0)
+        : 0),
+    0,
+  );
+
+  const absentDays = workRecords.filter(
+    (record) => record.status === "ABSENT",
+  ).length;
+
+  const hourlyRate =
+    monthlyPayroll == null
+      ? null
+      : Number(monthlyPayroll.hourlyRate);
 
   const totalAdvances = advances.reduce(
     (sum, advance) => sum + Number(advance.amount),
-    0
+    0,
   );
+
+  const calculations = calculatePayroll({
+    totalHours,
+    absentDays,
+    hourlyRate,
+    totalAdvances,
+  });
 
   res.json({
     month,
-    hourlyRate:
-      monthlyPayroll === null
-        ? null
-        : Number(monthlyPayroll.hourlyRate),
+    hourlyRate,
+    totalHours,
+    absentDays,
+    ...calculations,
     advances: advances.map((advance) => ({
       id: advance.id,
       amount: Number(advance.amount),
       paidAt: advance.paidAt,
       note: advance.note,
-      createdByName:advance.createdBy?.name??null,
+      createdByName: advance.createdBy?.name ?? null,
     })),
-    totalAdvances: Number(totalAdvances.toFixed(2)),
   });
 });
+
 
 // PATCH /api/workers/:id/payroll/rate
 export const updateHourlyRate = asyncHandler(async (req, res) => {

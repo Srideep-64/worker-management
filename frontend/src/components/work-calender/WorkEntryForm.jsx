@@ -8,6 +8,7 @@ export default function WorkEntryForm({
   workerId,
   selectedTitle,
   selectedRecord,
+  selectedDraft,
   roles,
   selectedRoleId,
   setSelectedRoleId,
@@ -16,12 +17,44 @@ export default function WorkEntryForm({
   roleSelectRef,
   entryValue,
   saving,
-  pendingEdit,
   saveError,
   onSubmit,
   onNavigateDate,
 }) {
   const isEditingManual = selectedRecord?.source === "MANUAL";
+  const hasSavedRecord = Boolean(selectedRecord);
+
+  const draftRole =
+    roles.find((role) => role.id === selectedDraft?.roleId) ??
+    selectedRecord?.role;
+
+  const shownRecord = selectedDraft
+    ? {
+        ...selectedRecord,
+        ...selectedDraft,
+        source: "MANUAL",
+        role: draftRole,
+        upload: selectedRecord?.upload,
+      }
+    : selectedRecord;
+
+  const roleValue = selectedDraft?.roleId
+    ? selectedDraft.roleId
+    : hasSavedRecord
+      ? editRoleId
+      : selectedRoleId;
+
+  const hasRole = hasSavedRecord
+    ? Boolean(
+        editRoleId ||
+          selectedDraft?.roleId ||
+          selectedRecord?.roleId ||
+          selectedRecord?.role?.id ||
+          selectedRoleId,
+      )
+    : Boolean(selectedRoleId || selectedDraft?.roleId);
+
+  const canEdit = !hasSavedRecord || isEditingManual;
 
   return (
     <section className="space-y-3 rounded-md border border-border bg-paper p-4">
@@ -30,78 +63,63 @@ export default function WorkEntryForm({
           <p className="font-semibold text-text">{selectedTitle}</p>
 
           <p className="mt-1 text-xs text-text-muted">
-            Enter hours or A, H, or W directly in the selected calendar
-            cell. Use the arrow keys or buttons to move between days.
+            New records and edits stay pending until you confirm Upload
+            records.
           </p>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateDate(-1)}
-            aria-label="Previous day"
-            title="Previous day (←)"
-          >
-            <span aria-hidden="true">←</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateDate(1)}
-            aria-label="Next day"
-            title="Next day (→)"
-          >
-            <span aria-hidden="true">→</span>
-          </button>
         </div>
       </div>
 
-      {selectedRecord && (
+      {shownRecord && (
         <div className="space-y-2 text-sm">
           <p className="text-text-muted">
-            {isEditingManual
-              ? "Manual work record"
-              : "Timesheet record — read-only"}
+            {selectedDraft
+              ? hasSavedRecord
+                ? "Manual record — pending changes"
+                : "New attendance record — pending upload"
+              : isEditingManual
+                ? "Manual work record"
+                : "Timesheet record — read-only"}
           </p>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="flex items-center gap-1">
-              Status: <Badge status={selectedRecord.status} />
+              Status: <Badge status={shownRecord.status} />
             </span>
 
             <span>
               Hours:{" "}
-              {selectedRecord.status === "WORKED"
-                ? selectedRecord.hours ?? "—"
+              {shownRecord.status === "WORKED"
+                ? shownRecord.hours ?? "—"
                 : "—"}
             </span>
 
             <span>
               Role:{" "}
-              {selectedRecord.status === "WORKED"
-                ? formatRole(selectedRecord.role)
+              {shownRecord.status === "WORKED"
+                ? formatRole(shownRecord.role)
                 : "—"}
             </span>
           </div>
 
-          {selectedRecord.upload && (
+          {shownRecord.upload && (
             <a
               className="inline-flex items-center gap-1 text-accent-dark hover:underline"
-              href={`/api/timesheets/${selectedRecord.upload.id}/source`}
+              href={`/api/timesheets/${shownRecord.upload.id}/source`}
             >
               <Download className="h-3.5 w-3.5" />
               View source timesheet (
-              {selectedRecord.upload.originalFilename})
+              {shownRecord.upload.originalFilename})
             </a>
           )}
         </div>
       )}
 
-      {(!selectedRecord || isEditingManual) && (
+      {canEdit && (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit(event);
+          }}
           className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div>
@@ -116,18 +134,18 @@ export default function WorkEntryForm({
               ref={roleSelectRef}
               id={`work-role-${workerId}`}
               className="input w-full"
-              value={selectedRecord ? editRoleId : selectedRoleId}
+              value={roleValue}
               onChange={(event) => {
-                if (selectedRecord) {
+                if (hasSavedRecord) {
                   setEditRoleId(event.target.value);
                 } else {
                   setSelectedRoleId(event.target.value);
                 }
               }}
-              disabled={saving || Boolean(pendingEdit)}
+              disabled={saving}
             >
               <option value="">
-                {selectedRecord ? "No role selected" : "Select role"}
+                {hasSavedRecord ? "No role selected" : "Select role"}
               </option>
 
               {roles.map((role) => (
@@ -145,15 +163,17 @@ export default function WorkEntryForm({
               disabled={
                 !entryValue.trim() ||
                 saving ||
-                Boolean(pendingEdit) ||
-                (!selectedRecord && !selectedRoleId)
+                !hasRole
               }
+              
             >
               {saving
-                ? "Saving..."
-                : selectedRecord
-                  ? "Review change"
-                  : "Save"}
+                ? "Uploading…"
+                : selectedDraft
+                  ? "Update pending record"
+                  : hasSavedRecord
+                    ? "Stage update"
+                    : "Add to pending records"}
             </button>
           </div>
         </form>
@@ -167,7 +187,7 @@ export default function WorkEntryForm({
         >
           {typeof saveError === "string"
             ? saveError
-            : saveError.message || "Unable to save the work record."}
+            : saveError.message || "Unable to stage the work record."}
         </div>
       )}
     </section>

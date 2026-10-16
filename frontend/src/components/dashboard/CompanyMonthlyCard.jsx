@@ -163,7 +163,7 @@ export default function CompanyMonthlyCard({ company, month }) {
           <p className="text-sm text-text-muted">Remaining pay</p>
           <p
             className={`font-semibold tabular-nums ${
-              Number(payroll?.remainingPay ?? 0) === 0
+              Number(payroll?.remainingPay ?? 0) <= 0
                 ? "text-green-600"
                 : "text-text"
             }`}

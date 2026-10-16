@@ -1,4 +1,5 @@
-import { useEffect, useRef,useState } from "react";
+
+import { useEffect, useRef, useState } from "react";
 
 import {
   CELL_TONE,
@@ -12,12 +13,14 @@ export default function WorkCalendarGrid({
   month,
   selected,
   byDate,
+  pendingByDate = {},
   entryValue,
   onEntryValueChange,
   canEditSelected,
   entryDisabled,
   onSelectDate,
   onSubmit,
+  onSubmitAndAdvance,
 }) {
   const cellInputRef = useRef(null);
 
@@ -27,7 +30,6 @@ export default function WorkCalendarGrid({
 
   useEffect(() => {
     if (!canEditSelected || entryDisabled) return;
-
     cellInputRef.current?.focus({ preventScroll: true });
   }, [selected, canEditSelected, entryDisabled]);
 
@@ -35,7 +37,6 @@ export default function WorkCalendarGrid({
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 767px)");
-
     const updateMobile = () => setIsMobile(media.matches);
 
     updateMobile();
@@ -64,7 +65,9 @@ export default function WorkCalendarGrid({
       {Array.from({ length: daysInMonth }, (_, index) => {
         const day = index + 1;
         const key = `${currentMonth}-${pad(day)}`;
-        const record = byDate[key];
+        const savedRecord = byDate[key];
+        const draft = pendingByDate[key];
+        const record = draft ?? savedRecord;
         const isSelected = selected === key;
         const isSunday = (offset + index) % 7 === 6;
         const editable = isSelected && canEditSelected;
@@ -91,12 +94,14 @@ export default function WorkCalendarGrid({
               }
             }}
             aria-pressed={isSelected}
-            aria-label={`Select ${key}`}
-            className={`flex h-14 min-w-0 cursor-pointer flex-col items-stretch justify-between overflow-hidden rounded-md border p-1.5 text-xs transition-colors ${
-              record
-                ? CELL_TONE[record.status] ||
-                  "border-border text-text"
-                : "border-dashed border-border text-text-muted"
+            aria-label={`${key}${draft ? ", pending upload" : ""}`}
+            className={`relative flex h-14 min-w-0 cursor-pointer flex-col items-stretch justify-between overflow-hidden rounded-md border p-1.5 text-xs transition-colors ${
+              draft
+                ? "border-amber-500 bg-amber-100 text-amber-950"
+                : savedRecord
+                  ? CELL_TONE[savedRecord.status] ||
+                    "border-border text-text"
+                  : "border-dashed border-border text-text-muted"
             } ${
               isSunday ? "border-2 border-red-400" : ""
             } ${
@@ -112,31 +117,41 @@ export default function WorkCalendarGrid({
             </span>
 
             {editable ? (
-              <input  
-              ref={cellInputRef}
-              type="text"
-              inputMode={isMobile ? "none" : "decimal"}
-              readOnly={isMobile}
-              autoComplete="off"
-              aria-label={`${key} hours or status`}
-              placeholder="Hours/A/H/W"
-              value={entryValue}
-              disabled={entryDisabled}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => onEntryValueChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onSubmit();
+              <input
+                ref={cellInputRef}
+                type="text"
+                inputMode={isMobile ? "none" : "decimal"}
+                readOnly={isMobile}
+                autoComplete="off"
+                aria-label={`${key} hours or status`}
+                placeholder="Hours/A/H/W"
+                value={entryValue}
+                disabled={entryDisabled}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) =>
+                  onEntryValueChange(event.target.value)
                 }
-              }}
-              className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-accent-dark outline-none placeholder:text-[9px] placeholder:text-text-muted"
-            />
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onSubmitAndAdvance();
+                  }
+                }}
+                className="w-full min-w-0 bg-transparent text-right text-sm font-semibold text-accent-dark outline-none placeholder:text-[9px] placeholder:text-text-muted"
+              />
             ) : (
               <span className="w-full truncate text-right text-sm font-semibold tabular-nums">
                 {displayValue || "\u00a0"}
               </span>
+            )}
+
+            {draft && (
+              <span
+                aria-label="Pending upload"
+                title="Pending upload"
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-600"
+              />
             )}
           </div>
         );

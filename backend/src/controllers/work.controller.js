@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { calculatePayroll, money } from "../utils/payroll.js";
 import {
   monthSchema,
   monthRange,
@@ -36,6 +37,23 @@ export const updateManualWorkSchema = z.object({
   ]),
   roleId: z.string().uuid().optional(),
   hours: z.coerce.number().gt(0).max(24).optional(),
+});
+
+export const createManualWorkBatchSchema = z.object({
+  records: z.array(
+    z.object({
+      recordId: z.string().uuid().optional(),
+      workDate: z.coerce.date(),
+      roleId: z.string().uuid().optional(),
+      status: z.enum([
+        "WORKED",
+        "ABSENT",
+        "HOLIDAY",
+        "WEEKLY_OFF",
+      ]),
+      hours: z.coerce.number().gt(0).max(24).optional(),
+    }),
+  ).min(1).max(31),
 });
 
 /* Shared helpers                                                             */
@@ -472,6 +490,208 @@ export const updateManualWork = asyncHandler(async (req, res) => {
   });
 });
 
+/* POST /api/workers/:id/work/batch */
+export const createManualWorkBatch = asyncHandler(async (req, res) => {
+  const workerId = req.params.id;
+  const { records: submittedRecords } = req.body;
+
+  // Normalize dates to calendar-day keys and reject duplicate dates.
+  const normalizedRecords = submittedRecords.map((item) => {
+    const key = dateOnly(item.workDate);
+
+    if (!key) {
+      throw ApiError.badRequest("Every record must have a valid work date.");
+    }
+
+    return {
+      ...item,
+      dateKey: key,
+      workDate: new Date(`${key}T00:00:00.000Z`),
+    };
+  });
+
+  const seenDates = new Set();
+
+  for (const item of normalizedRecords) {
+    if (seenDates.has(item.dateKey)) {
+      throw ApiError.badRequest(
+        `The batch contains more than one entry for ${item.dateKey}.`,
+      );
+    }
+
+    seenDates.add(item.dateKey);
+  }
+
+  const month = normalizedRecords[0].dateKey.slice(0, 7);
+
+  if (normalizedRecords.some((item) => item.dateKey.slice(0, 7) !== month)) {
+    throw ApiError.badRequest(
+      "All records in a batch must belong to the same month.",
+    );
+  }
+
+  const monthStart = new Date(`${month}-01T00:00:00.000Z`);
+
+  const savedRecords = await prisma.$transaction(async (tx) => {
+    const worker = await tx.worker.findUnique({
+      where: { id: workerId },
+      select: {
+        id: true,
+        companyId: true,
+        joiningDate: true,
+        leavingDate: true,
+      },
+    });
+
+    if (!worker) {
+      throw ApiError.notFound("Worker not found.");
+    }
+
+    // One check for the entire month, rather than one per entry.
+    const activeTimesheet = await tx.timesheetUpload.findFirst({
+      where: {
+        companyId: worker.companyId,
+        periodMonth: monthStart,
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+
+    if (activeTimesheet) {
+      throw ApiError.conflict(
+        "This month is managed by an active timesheet. Manual records cannot be uploaded.",
+      );
+    }
+
+    const existingRecords = await tx.workRecord.findMany({
+      where: {
+        workerId,
+        workDate: {
+          in: normalizedRecords.map((item) => item.workDate),
+        },
+      },
+      include: RECORD_INCLUDE,
+    });
+
+    const existingByDate = new Map(
+      existingRecords.map((record) => [
+        dateOnly(record.workDate),
+        record,
+      ]),
+    );
+
+    // Validate every item and prepare its final values before writing.
+    const plans = normalizedRecords.map((item) => {
+      const {
+        dateKey,
+        workDate,
+        recordId,
+        roleId,
+        status,
+        hours,
+      } = item;
+
+      assertWorkDateWithinEmployment(worker, workDate);
+      validateWorkStatus({ status, hours });
+
+      const existing = existingByDate.get(dateKey);
+
+      if (recordId) {
+        if (!existing || existing.id !== recordId) {
+          throw ApiError.conflict(
+            `The existing record for ${dateKey} has changed. Refresh attendance and try again.`,
+          );
+        }
+
+        if (existing.source !== "MANUAL" || existing.uploadId) {
+          throw ApiError.badRequest(
+            `The timesheet record for ${dateKey} cannot be edited manually.`,
+          );
+        }
+      } else if (existing) {
+        throw ApiError.conflict(
+          `A record already exists for ${dateKey}. Refresh attendance before uploading.`,
+        );
+      }
+
+      const nextRoleId = roleId ?? existing?.roleId;
+
+      if (!nextRoleId) {
+        throw ApiError.badRequest(
+          `Select a role for the new record dated ${dateKey}.`,
+        );
+      }
+
+      return {
+        existing,
+        workDate,
+        roleId: nextRoleId,
+        status,
+        hours: status === "WORKED" ? hours : null,
+      };
+    });
+
+    // Check all role IDs with one query.
+    const roleIds = [...new Set(plans.map((item) => item.roleId))];
+
+    const roles = await tx.role.findMany({
+      where: { id: { in: roleIds } },
+      select: { id: true },
+    });
+
+    const validRoleIds = new Set(roles.map((role) => role.id));
+
+    for (const item of plans) {
+      if (!validRoleIds.has(item.roleId)) {
+        throw ApiError.badRequest(
+          "One or more selected roles do not exist.",
+        );
+      }
+    }
+
+    // All validation has passed. Writes commit together or roll back together.
+    const results = [];
+
+    for (const item of plans) {
+      const data = {
+        roleId: item.roleId,
+        status: item.status,
+        hours: item.hours,
+      };
+
+      const record = item.existing
+        ? await tx.workRecord.update({
+            where: { id: item.existing.id },
+            data,
+            include: RECORD_INCLUDE,
+          })
+        : await tx.workRecord.create({
+            data: {
+              workerId,
+              workDate: item.workDate,
+              ...data,
+              source: "MANUAL",
+              uploadId: null,
+            },
+            include: RECORD_INCLUDE,
+          });
+
+      results.push(serializeRecord(record));
+    }
+
+    return results;
+  },{
+  maxWait:10000,
+  timeout:20000,
+});
+
+  res.status(200).json({
+    month,
+    count: savedRecords.length,
+    records: savedRecords,
+  });
+});
+
 /* GET /api/companies/:id/stats?month=YYYY-MM                                 */
 export const getCompanyStats = asyncHandler(async (req, res) => {
   const company = await prisma.company.findUnique({
@@ -621,6 +841,17 @@ export const getCompanyStats = asyncHandler(async (req, res) => {
   for (const worker of workers) {
     const hourlyRate = rateByWorker.get(worker.id);
 
+    const attendance = attendanceByWorker.get(worker.id) ?? {
+      totalHours: 0,
+      absentDays: 0,
+    };
+
+    const workerAdvances =
+      advancesByWorker.get(worker.id) ?? 0;
+
+    // Advances count even when the worker has no hourly rate.
+    totalAdvances += workerAdvances;
+
     if (hourlyRate === undefined) {
       workersWithoutRate += 1;
       continue;
@@ -628,31 +859,17 @@ export const getCompanyStats = asyncHandler(async (req, res) => {
 
     workersWithRate += 1;
 
-    const attendance = attendanceByWorker.get(worker.id) ?? {
-      totalHours: 0,
-      absentDays: 0,
-    };
+    const payroll = calculatePayroll({
+      totalHours: attendance.totalHours,
+      absentDays: attendance.absentDays,
+      hourlyRate,
+      totalAdvances: workerAdvances,
+    });
 
-    const workerGrossPay =
-      attendance.totalHours * hourlyRate;
-
-    const workerAbsenceDeduction =
-      Math.max(0, attendance.absentDays - 2) * 25;
-
-    const workerNetPay =
-      workerGrossPay - workerAbsenceDeduction;
-
-    const workerAdvances =
-      advancesByWorker.get(worker.id) ?? 0;
-
-    grossPay += workerGrossPay;
-    absenceDeductions += workerAbsenceDeduction;
-    netPay += workerNetPay;
-    totalAdvances += workerAdvances;
+    grossPay += payroll.grossPay;
+    absenceDeductions += payroll.absenceDeduction;
+    netPay += payroll.netPay;
   }
-
-  const money = (value) =>
-    Math.round((value + Number.EPSILON) * 100) / 100;
 
   const payrollSummary = {
     workersWithRate,

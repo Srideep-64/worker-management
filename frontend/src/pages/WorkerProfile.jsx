@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { ChevronLeft, FileText, User, CalendarClock } from "lucide-react";
+import { ChevronLeft, FileText, User, CalendarClock, ChevronDown, ChevronUp} from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import WorkCalendar from "../components/work-calender/WorkCalender.jsx";
+import WorkSummary from "../components/work-calender/WorkSummary.jsx";
+import PayrollSummary from "../components/work-calender/PayrollSummary.jsx";
 import DocumentsPanel from "../components/worker/DocumentsPanel.jsx";
 import EditWorkerModal from "../components/worker/EditWorkerModal.jsx";
 import ChangeWorkerStatusModal from "../components/worker/ChangeWorkerStatusModal.jsx";
@@ -79,11 +81,24 @@ export default function WorkerProfile() {
   const [changingStatus, setChangingStatus] = useState(false);
   const [photoVersion, setPhotoVersion] = useState(0);
   const [hasPhoto, setHasPhoto] = useState(false);
+  const [documentsExpanded, setDocumentsExpanded] = useState(false);
 
   const location = useLocation();
 
   const returnTo = location.state?.returnTo || "/workers";
   const returnLabel = location.state?.returnLabel || "Workers";
+
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+  const now = new Date();
+
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const [workRefreshKey, setWorkRefreshKey] = useState(0);
+
+  function notifyWorkUpdated() {
+    setWorkRefreshKey((key) => key + 1);
+  }
 
   if (loading && !worker) {
     return (
@@ -192,15 +207,7 @@ export default function WorkerProfile() {
 
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 md:grid-cols-4">
-          <Field label="Nationality" value={worker.nationality} />
-
-          <Field
-            label="Date of birth"
-            value={
-              worker.dateOfBirth ? fmtDate(worker.dateOfBirth) : null
-            }
-          />
+        <div className="mt-5 grid grid-cols-3 gap-4 border-t border-border pt-4 md:grid-cols-4">
 
           <Field label="Phone" value={worker.phone} />
 
@@ -221,22 +228,64 @@ export default function WorkerProfile() {
 
       {/* Documents and work calendar */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <Card title="Identity documents" className="lg:col-span-2">
-          <DocumentsPanel
-            worker={worker}
-            onPhotoChanged={() =>
-              setPhotoVersion((version) => version + 1)
-            }
-            onPhotoAvailabilityChange={setHasPhoto}
-          />
-        </Card>
+      <Card className="lg:col-span-2">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-text">
+            Identity documents
+          </h2>
 
-        <Card title="Work calendar" className="lg:col-span-3">
-          <WorkCalendar 
+          <button
+            type="button"
+            onClick={() => setDocumentsExpanded((expanded) => !expanded)}
+            aria-expanded={documentsExpanded}
+            className="btn-secondary inline-flex shrink-0 items-center gap-2"
+          >
+            {documentsExpanded ? "Hide documents" : "Show documents"}
+
+            {documentsExpanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+
+        {documentsExpanded && (
+          <div className="mt-4">
+            <DocumentsPanel
+              worker={worker}
+              onPhotoChanged={() =>
+                setPhotoVersion((version) => version + 1)
+              }
+              onPhotoAvailabilityChange={setHasPhoto}
+            />
+          </div>
+        )}
+      </Card>
+
+      <Card title="Work calendar" className="lg:col-span-3">
+        <WorkCalendar
           workerId={worker.id}
-          companyId={worker.companyId} 
-           />
-        </Card>
+          companyId={worker.companyId}
+          onMonthChange={setSelectedMonth}
+          onWorkUpdated={notifyWorkUpdated}
+        />
+      </Card>
+
+      {/* Work summary */}
+      <WorkSummary
+        workerId={worker.id}
+        month={selectedMonth}
+        refreshKey={workRefreshKey}
+      />
+
+      {/* Payroll summary */}
+      <PayrollSummary
+        workerId={worker.id}
+        companyId={worker.companyId}
+        month={selectedMonth}
+        refreshKey={workRefreshKey}
+      />
       </div>
 
       {editing && (

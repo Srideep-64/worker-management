@@ -1,17 +1,18 @@
-
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight,RefreshCw } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Upload,
+} from "lucide-react";
 
 import Badge from "../ui/Badge.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
-import Modal from "../ui/Modal.jsx";
 import { api } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
 
 import WorkCalendarGrid from "./WorkCalendarGrid.jsx";
-import WorkEntryForm from "./WorkEntryForm.jsx";
-import ConfirmWorkChange from "./ConfirmWorkChange.jsx";
-import WorkSummary from "./WorkSummary.jsx";
+import ConfirmWorkUpload from "./ConfirmWorkUpload.jsx";
 import WorkMobileKeyboard from "./WorkMobileKeyboard.jsx";
 
 import {
@@ -40,6 +41,7 @@ import {
   pad,
 } from "./workCalendarUtils.js";
 
+
   function getRecordEntryValue(record) {
     if (!record || record.source !== "MANUAL") return "";
 
@@ -54,7 +56,7 @@ import {
     );
   }
 
-export default function WorkCalendar({ workerId, companyId }) {
+export default function WorkCalendar({ workerId, companyId, onMonthChange, onWorkUpdated }) {
   const today = dateKey(new Date());
 
   const [ym, setYm] = useState(() => {
@@ -72,19 +74,25 @@ export default function WorkCalendar({ workerId, companyId }) {
   const [entryValue, setEntryValue] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [pendingEdit, setPendingEdit] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [showUploadConfirm, setShowUploadConfirm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [focusRoleAfterError, setFocusRoleAfterError] = useState(false);
-  const refreshPayrollRef = useRef(null);
 
   const roleSelectRef = useRef(null);
+  const preserveRoleRef = useRef(false);
 
   const month = monthKey(ym.y, ym.m);
+
+  useEffect(() => {
+    onMonthChange?.(month);
+  }, [month, onMonthChange]);
 
   function invalidateRelatedCaches(workDate) {
   const workMonth = workDate.slice(0, 7);
 
   invalidateCachedWork(workerId, workMonth);
+  invalidateCachedPayroll(workerId,workMonth);
   invalidateMonthlyStats(companyId, workMonth);
   invalidateWorkerSummaries(companyId, workMonth, workerId);
 }
@@ -121,7 +129,6 @@ export default function WorkCalendar({ workerId, companyId }) {
 
   const roles = rolesData?.roles ?? [];
   const records = data?.records ?? [];
-  const summary = data?.summary;
 
   const byDate = Object.fromEntries(
     records.map((record) => [
@@ -130,35 +137,100 @@ export default function WorkCalendar({ workerId, companyId }) {
     ]),
   );
 
+  const pendingByDate = drafts;
+  const selectedDraft = selected ? drafts[selected] : null;
+  const pendingRecords = Object.values(drafts);
+  const pendingCount = pendingRecords.length;
+
   const selectedRecord = selected ? byDate[selected] : null;
   const isEditingManual = selectedRecord?.source === "MANUAL";
+  const roleControlValue = selectedRecord
+    ? isEditingManual
+      ? editRoleId || selectedRecord.roleId || selectedRecord.role?.id || ""
+      : selectedRecord.roleId || selectedRecord.role?.id || selectedRoleId
+    : editRoleId || selectedDraft?.roleId || selectedRoleId;
+  const roleControlDisabled =
+    saving ||
+    showUploadConfirm ||
+    Boolean(selectedRecord && !isEditingManual);
 
   // Load the existing role when navigating to a manual record.
   // Non-WORKED records display an empty role selection.
   useEffect(() => {
-    if (!selectedRecord || selectedRecord.source !== "MANUAL") {
-      setEditRoleId("");
+  const current = selectedDraft ?? selectedRecord;
+
+  if (!current) {
+    if (preserveRoleRef.current) {
+      preserveRoleRef.current = false;
       return;
     }
 
-    setEditRoleId(
-      selectedRecord.status === "WORKED"
-        ? selectedRecord.role?.id ?? ""
-        : "",
-    );
-  }, [
-    selectedRecord?.id,
-    selectedRecord?.source,
-    selectedRecord?.status,
-    selectedRecord?.role?.id,
-  ]);
+    setEditRoleId("");
+    return;
+  }
 
-    
+  if (current.source && current.source !== "MANUAL") {
+    setEditRoleId("");
+    return;
+  }
+
+  const roleId = current.roleId ?? current.role?.id ?? "";
+
+  setEditRoleId(current.status === "WORKED" ? roleId : "");
+  setSelectedRoleId(roleId);
+}, [
+  selected,
+  selectedDraft?.status,
+  selectedDraft?.roleId,
+  selectedRecord?.id,
+  selectedRecord?.source,
+  selectedRecord?.status,
+  selectedRecord?.roleId,
+  selectedRecord?.role?.id,
+]);
+ 
   function clearPendingEntry() {
     setEntryValue("");
     setSaveError("");
-    setPendingEdit(null);
   }
+
+  function confirmDiscardDrafts() {
+    if (pendingCount === 0) return true;
+
+    return window.confirm(
+      `You have ${pendingCount} pending attendance record(s) for ${month}. ` +
+      "Leaving this month will discard those drafts. " +
+      "Upload them first, or confirm to discard them.",
+    );
+  }
+
+  function changeMonthSafely(nextDate) {
+    if (!confirmDiscardDrafts()) return;
+
+    setDrafts({});
+    setShowUploadConfirm(false);
+    setSelected(dateKey(nextDate));
+    setYm({
+      y: nextDate.getFullYear(),
+      m: nextDate.getMonth(),
+    });
+    clearPendingEntry();
+  }
+
+  useEffect(() => {
+    if (pendingCount === 0) return;
+
+    const warnBeforeLeaving = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeLeaving);
+    };
+  }, [pendingCount]);
 
   // Keyboard navigation works while the entry field is focused.
   useEffect(() => {
@@ -194,12 +266,15 @@ export default function WorkCalendar({ workerId, companyId }) {
 
       const nextKey = dateKey(currentDate);
 
-      setSelected(nextKey);
-      setYm({
-        y: currentDate.getFullYear(),
-        m: currentDate.getMonth(),
-      });
+      if (
+        currentDate.getFullYear() !== ym.y ||
+        currentDate.getMonth() !== ym.m
+      ) {
+        changeMonthSafely(currentDate);
+        return;
+      }
 
+      setSelected(nextKey);
       clearPendingEntry();
     }
 
@@ -208,17 +283,25 @@ export default function WorkCalendar({ workerId, companyId }) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selected, today]);
+  }, [selected, today, ym.y, ym.m, pendingCount]);
 
   useEffect(() => {
-  setEntryValue(getRecordEntryValue(selectedRecord));
-}, [
-  selected,
-  selectedRecord?.id,
-  selectedRecord?.source,
-  selectedRecord?.status,
-  selectedRecord?.hours,
-]);
+    const current = selectedDraft
+      ? { ...selectedDraft, source: "MANUAL" }
+      : selectedRecord;
+
+    setEntryValue(getRecordEntryValue(current));
+    setSaveError("");
+  }, [
+    selected,
+    selectedDraft?.status,
+    selectedDraft?.hours,
+    selectedDraft?.roleId,
+    selectedRecord?.id,
+    selectedRecord?.source,
+    selectedRecord?.status,
+    selectedRecord?.hours,
+  ]);
 
   useEffect(() => {
     if (!focusRoleAfterError) return;
@@ -240,35 +323,32 @@ export default function WorkCalendar({ workerId, companyId }) {
     return () => cancelAnimationFrame(frame);
   }, [focusRoleAfterError]);
 
-  function navigateDate(delta) {
-    const currentDate = parseDate(selected || today);
-
-    currentDate.setDate(currentDate.getDate() + delta);
-
-    setSelected(dateKey(currentDate));
-    setYm({
-      y: currentDate.getFullYear(),
-      m: currentDate.getMonth(),
-    });
-
-    clearPendingEntry();
-  }
-
   function shiftMonth(delta) {
     const nextMonth = new Date(ym.y, ym.m + delta, 1);
-
-    setYm({
-      y: nextMonth.getFullYear(),
-      m: nextMonth.getMonth(),
-    });
-
-    setSelected(dateKey(nextMonth));
-    clearPendingEntry();
+    changeMonthSafely(nextMonth);
   }
 
-  function selectDate(key) {
+function selectDate(date) {
+    const key = typeof date === "string" ? date : dateKey(date);
+
+    const targetDraft = drafts[key];
+    const targetRecord = byDate[key];
+
+    const roleToKeep =
+      targetDraft?.roleId ||
+      targetRecord?.roleId ||
+      targetRecord?.role?.id ||
+      selectedRoleId;
+
     setSelected(key);
-    clearPendingEntry();
+    setEntryValue("");
+    setSaveError("");
+    setSelectedRoleId(roleToKeep || "");
+    setEditRoleId(
+      targetRecord?.source === "MANUAL"
+        ? targetDraft?.roleId || targetRecord?.roleId || targetRecord?.role?.id || ""
+        : ""
+    );
   }
 
   function parseEntry() {
@@ -303,179 +383,211 @@ export default function WorkCalendar({ workerId, companyId }) {
     };
   }
 
-  async function handleEntrySubmit(event) {
-    event?.preventDefault();
+  
+function handleEntrySubmit(event) {
+  event?.preventDefault();
 
-    if (saving || pendingEdit) return;
+  if (saving || showUploadConfirm) return;
 
-    if (!selected) {
-      setSaveError("Select a date first.");
-      return;
-    }
+  if (!selected) {
+    setSaveError("Select a date first.");
+    return;
+  }
 
-    let next;
+  let next;
 
-    try {
-      next = parseEntry();
-    } catch (err) {
-      setSaveError(err.message);
-      return;
-    }
+  try {
+    next = parseEntry();
+  } catch (err) {
+    setSaveError(err.message);
+    return;
+  }
 
-    // Validate hours for WORKED records.
-    if (
-      next.status === "WORKED" &&
-      (!Number.isFinite(Number(next.hours)) ||
-        Number(next.hours) <= 0 ||
-        Number(next.hours) > 24)
-    ) {
-      setSaveError("Hours must be greater than 0 and at most 24.");
-      return;
-    }
+  if (
+    next.status === "WORKED" &&
+    (!Number.isFinite(Number(next.hours)) ||
+      Number(next.hours) <= 0 ||
+      Number(next.hours) > 24)
+  ) {
+    setSaveError("Hours must be greater than 0 and at most 24.");
+    return;
+  }
 
-    const existing = byDate[selected];
+  const existing = byDate[selected];
 
-    // Existing records: only manual records can be edited.
-    if (existing) {
-      if (existing.source !== "MANUAL") {
-        setSaveError(
-          "Timesheet records cannot be edited manually.",
-        );
-        return;
-      }
+  if (existing && existing.source !== "MANUAL") {
+    setSaveError("Timesheet records cannot be edited manually.");
+    return;
+  }
 
-      let nextRoleId;
+  let roleId = "";
 
-      if (next.status === "WORKED") {
-        nextRoleId =
-          editRoleId ||
-          (existing.status === "WORKED"
-            ? existing.role?.id
-            : "");
+  if (next.status === "WORKED") {
+    roleId =
+      editRoleId ||
+      selectedDraft?.roleId ||
+      existing?.role?.id ||
+      selectedRoleId;
 
-        if (!nextRoleId) {
-          setSaveError(
-            "Select a role when changing the record to Worked.",
-          );
-          setFocusRoleAfterError(true);
-          return;
-        }
-      }
-
-      const nextRole =
-        next.status === "WORKED"
-          ? roles.find((role) => role.id === nextRoleId) ??
-            (existing.role?.id === nextRoleId
-              ? existing.role
-              : null)
-          : null;
-
-      if (next.status === "WORKED" && !nextRole) {
-        setSaveError("The selected role could not be found.");
-        return;
-      }
-
-      const changes = buildChanges(existing, next, nextRole);
-
-      if (changes.length === 0) {
-        setSaveError("No changes detected.");
-        return;
-      }
-
-      setSaveError("");
-
-      setPendingEdit({
-        recordId: existing.id,
-        date: selected,
-        changes,
-        payload: {
-          status: next.status,
-          ...(next.status === "WORKED"
-            ? {
-                hours: next.hours,
-                roleId: nextRoleId,
-              }
-            : {}),
-        },
-      });
-
-      return;
-    }
-
-    // New records save normally without a confirmation step.
-    if (!selectedRoleId) {
-      setSaveError("Select a role first.");
+    if (!roleId) {
+      setSaveError(
+        "Select a role when entering worked hours.",
+      );
       setFocusRoleAfterError(true);
       return;
     }
 
-    setSaving(true);
-    setSaveError("");
+    const roleExists = roles.some((role) => role.id === roleId);
 
-    try {
-      await api.post(`/workers/${workerId}/work`, {
-        workDate: selected,
-        roleId: selectedRoleId,
-        status: next.status,
-        ...(next.status === "WORKED"
-          ? { hours: next.hours }
-          : {}),
-      });
-
-      invalidateRelatedCaches(selected);
-      await reload();
-
-      setEntryValue("");
-      setSaveError("");
-
-      
-      navigateDate(1);
-    } catch (err) {
-      setSaveError(
-        err?.message || "Could not save this work record.",
-      );
-    } finally {
-      setSaving(false);
+    if (!roleExists) {
+      setSaveError("The selected role could not be found.");
+      return;
     }
+  } else {
+    // Every new record needs a roleId in the database,
+    // even when its status is Absent, Holiday, or Weekly off.
+    roleId =
+      selectedDraft?.roleId ||
+      existing?.role?.id ||
+      selectedRoleId;
 
-  }
-
-  async function confirmEdit() {
-    if (!pendingEdit || saving) return;
-
-    setSaving(true);
-    setSaveError("");
-
-    try {
-      await api.patch(
-        `/workers/${workerId}/work/${pendingEdit.recordId}`,
-        pendingEdit.payload,
-      );
-
-      invalidateRelatedCaches(pendingEdit.date);
-      await reload();
-
-      setPendingEdit(null);
-      setEntryValue("");
-      setSaveError("");
-      
-      navigateDate(1);
-
-    } catch (err) {
-      setSaveError(
-        err?.message || "Could not update this work record.",
-      );
-    } finally {
-      setSaving(false);
-
+    if (!existing && !roleId) {
+      setSaveError("Select a role first.");
+      setFocusRoleAfterError(true);
+      return;
     }
   }
 
-  function cancelEdit() {
-    setPendingEdit(null);
+  const draft = {
+    recordId: existing?.id,
+    date: selected,
+    workDate: selected,
+    roleId,
+    status: next.status,
+    hours: next.status === "WORKED" ? next.hours : null,
+  };
+
+  // If this is an edit, compare the proposed value against the
+  // original saved record, not the previous draft.
+  if (existing) {
+    const nextRole =
+      roles.find((role) => role.id === roleId) ??
+      existing.role;
+
+    const changes = buildChanges(existing, next, nextRole);
+
+    if (changes.length === 0) {
+      if (drafts[selected]) {
+        setDrafts((current) => {
+          const updated = { ...current };
+          delete updated[selected];
+          return updated;
+        });
+
+        setEntryValue(getRecordEntryValue(existing));
+        setSaveError("Draft removed because the record matches its saved value.");
+      } else {
+        setSaveError("No changes detected.");
+      }
+
+      return;
+    }
+  }
+
+  setDrafts((current) => ({
+    ...current,
+    [selected]: draft,
+  }));
+
+  setSaveError("");
+  return true;
+}
+
+  function handleSubmitAndAdvance(event) {
+    // Remember the role used for this entry before changing dates.
+    event?.preventDefault();
+
+    const roleToKeep =
+      editRoleId ||
+      selectedDraft?.roleId ||
+      selectedRecord?.roleId ||
+      selectedRecord?.role?.id ||
+      selectedRoleId;
+
+    const staged = handleEntrySubmit();
+
+    // Invalid entries must not advance.
+    if (staged !== true) return;
+
+    const currentDate = parseDate(selected);
+    const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate();
+
+    // Find the next editable date, skipping read-only timesheet records.
+    let nextDay = currentDate.getDate() + 1;
+
+    while (nextDay <= daysInMonth) {
+      const nextDate = new Date(ym.y, ym.m, nextDay);
+      const nextKey = dateKey(nextDate);
+      const nextRecord = byDate[nextKey];
+
+      if (!nextRecord || nextRecord.source === "MANUAL") {
+        preserveRoleRef.current = true;
+
+        setSelectedRoleId(roleToKeep);
+        setEditRoleId("");
+        setSelected(nextKey);
+        setEntryValue("");
+        setSaveError("");
+
+        return;
+      }
+
+      nextDay += 1;
+    }
+
+    setShowUploadConfirm(true);
+  }
+
+async function confirmUpload() {
+  if (saving || pendingCount === 0) return;
+
+  setSaving(true);
+  setSaveError("");
+
+  try {
+    const recordsToUpload = pendingRecords.map((draft) => ({
+      ...(draft.recordId ? { recordId: draft.recordId } : {}),
+      workDate: draft.workDate,
+      roleId: draft.roleId,
+      status: draft.status,
+      ...(draft.status === "WORKED"
+        ? { hours: Number(draft.hours) }
+        : {}),
+    }));
+
+    await api.post(`/workers/${workerId}/work/batch`, {
+      records: recordsToUpload,
+    });
+
+    invalidateRelatedCaches(`${month}-01`);
+
+    setDrafts({});
+    setShowUploadConfirm(false);
     setEntryValue("");
     setSaveError("");
+
+    await reload();
+    onWorkUpdated?.();
+  } catch (err) {
+    // Keep drafts if the batch fails so the user can retry.
+    setSaveError(
+      err?.message || "Could not upload attendance records.",
+    );
+    setShowUploadConfirm(false);
+  } finally {
+    setSaving(false);
   }
+}
 
   const title = new Date(ym.y, ym.m, 1).toLocaleDateString(
     "en-GB",
@@ -485,28 +597,16 @@ export default function WorkCalendar({ workerId, companyId }) {
     },
   );
 
-  const selectedTitle = selected
-    ? parseDate(selected).toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "Select a date";
-
   async function handleRefresh() {
       if (refreshing) return;
 
       setRefreshing(true);
 
-      invalidateCachedWork(workerId, month);
-      invalidateCachedPayroll(workerId, month);
+      invalidateRelatedCaches(`${month}-01`);
 
       try {
-        await Promise.all([
-          reload(),
-          refreshPayrollRef.current?.(),
-        ]);
+        await reload();
+        onWorkUpdated?.();
       } finally {
         setRefreshing(false);
       }
@@ -516,6 +616,28 @@ export default function WorkCalendar({ workerId, companyId }) {
     <div className="space-y-5">
       {/* Month navigation and status legend */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 border border-[#007AFF] bg-[#007AFF] text-white hover:opacity-90 dark:border-[#0A84FF] dark:bg-[#0A84FF] rounded-md px-3 py-2"
+          onClick={() => {
+            if (pendingCount > 0) {
+              setShowUploadConfirm(true);
+              setSaveError("");
+            }
+          }}
+          disabled={saving || pendingCount === 0}
+          title="Review and upload pending attendance records"
+        >
+          <Upload className="h-4 w-4" />
+          Upload records
+          {pendingCount > 0 && (
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+
         <button
           type="button"
           className="btn-secondary inline-flex items-center gap-2"
@@ -528,6 +650,33 @@ export default function WorkCalendar({ workerId, companyId }) {
           />
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
+        <label className="flex items-center gap-2 text-sm text-text-muted">
+          <span className="sr-only">Role for selected date</span>
+          <select
+            ref={roleSelectRef}
+            aria-label="Role for selected date"
+            className="input min-w-0 max-w-52"
+            value={roleControlValue}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (selectedRecord || selectedDraft) {
+                setEditRoleId(value);
+              } else {
+                setSelectedRoleId(value);
+              }
+              setSaveError("");
+            }}
+            disabled={roleControlDisabled}
+          >
+            <option value="">Select role</option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.code} — {role.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -579,16 +728,25 @@ export default function WorkCalendar({ workerId, companyId }) {
         month={ym.m}
         selected={selected}
         byDate={byDate}
+        pendingByDate={pendingByDate}
         entryValue={entryValue}
         onEntryValueChange={(value) => {
           setEntryValue(value);
           setSaveError("");
         }}
         canEditSelected={!selectedRecord || isEditingManual}
-        entryDisabled={saving || Boolean(pendingEdit)}
+        entryDisabled={saving || showUploadConfirm}
         onSelectDate={selectDate}
         onSubmit={handleEntrySubmit}
+        onSubmitAndAdvance={handleSubmitAndAdvance}
       />
+
+            {saveError && (
+        <p role="alert" className="text-sm text-danger">
+          {saveError}
+        </p>
+      )}
+
 
       <WorkMobileKeyboard
         value={entryValue}
@@ -596,60 +754,34 @@ export default function WorkCalendar({ workerId, companyId }) {
           setEntryValue(value);
           setSaveError("");
         }}
-        onSubmit={handleEntrySubmit}
-        disabled={saving || Boolean(pendingEdit) || !selected || !(!selectedRecord || isEditingManual)}
+        onSubmit={handleSubmitAndAdvance}
+        disabled={
+          saving ||
+          showUploadConfirm ||
+          !selected ||
+          !(!selectedRecord || isEditingManual)
+        }
       />
 
       {!loading && records.length === 0 && (
         <EmptyState
           title="No work records this month"
-          description="Select a date, choose a role, and enter the work details below."
+          description="Select a date, choose a role from the calendar toolbar, and enter hours or a status in the calendar."
         />
       )}
 
-      {/* Selected date and work entry */}
-      <WorkEntryForm
-        workerId={workerId}
-        selectedTitle={selectedTitle}
-        selectedRecord={selectedRecord}
-        roles={roles}
-        selectedRoleId={selectedRoleId}
-        setSelectedRoleId={setSelectedRoleId}
-        editRoleId={editRoleId}
-        setEditRoleId={setEditRoleId}
-        roleSelectRef={roleSelectRef}
-        entryValue={entryValue}
-        saving={saving}
-        pendingEdit={pendingEdit}
-        saveError={saveError}
-        onSubmit={handleEntrySubmit}
-        onNavigateDate={navigateDate}
-      />
-
-      {/* Confirmation modal for editing manual work records */}
-      {pendingEdit && (
-        <Modal
-          title="Confirm record change"
-          onClose={cancelEdit}
-        >
-          <ConfirmWorkChange
-            pendingEdit={pendingEdit}
-            saving={saving}
-            onConfirm={confirmEdit}
-            onCancel={cancelEdit}
-          />
-        </Modal>
+      {showUploadConfirm && (
+        <ConfirmWorkUpload
+          month={month}
+          records={pendingRecords}
+          saving={saving}
+          onConfirm={confirmUpload}
+          onCancel={() => {
+            if (!saving) setShowUploadConfirm(false);
+          }}
+        />
       )}
 
-      {/* Monthly summary */}
-      <WorkSummary
-        workerId={workerId}
-        month={month}
-        summary={summary}
-        data={data}
-        records={records}
-        refreshRef={refreshPayrollRef}
-      />
     </div>
   );
 }

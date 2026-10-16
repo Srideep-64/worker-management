@@ -18,6 +18,8 @@ import {
   createManualWorkSchema,
   updateManualWork,
   updateManualWorkSchema,
+  createManualWorkBatch,
+  createManualWorkBatchSchema,
 } from "../controllers/work.controller.js";
 
 import {
@@ -96,6 +98,12 @@ router.post(
 router.delete(
   "/workers/:id/advances/:advanceId",
   deleteAdvance,
+);
+
+router.post(
+  "/workers/:id/work/batch",
+  validate({ body: createManualWorkBatchSchema }),
+  createManualWorkBatch,
 );
 
 export default router;

@@ -324,7 +324,7 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
                   <p
                     className={`mt-1 text-lg font-semibold tabular-nums ${
                       label === "Remaining pay" &&
-                      Number(value ?? 0).toFixed(2) === "0.00"
+                      Number(value ?? 0) <= "0.00"
                         ? "text-green-600"
                         : "text-text"
                     }`}

@@ -133,16 +133,16 @@ export default function ChangeWorkerStatusModal({
       wide
     >
       <form onSubmit={submit} className="space-y-5">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="w-fit rounded-lg border border-danger/25 bg-danger/10 px-3 py-2.5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
 
             <div>
-              <h3 className="font-semibold text-red-700">
+              <h3 className="font-semibold text-danger">
                 Worker leaving?
               </h3>
 
-              <p className="mt-1 text-sm text-red-700">
+              <p className="mt-1 text-sm leading-relaxed text-danger">
                 Record the worker's final working date below.
                 Their status will be calculated automatically
                 from their joining and leaving dates.
@@ -161,7 +161,7 @@ export default function ChangeWorkerStatusModal({
 
             <input
               id="worker-leaving-date"
-              className="input pl-9"
+              className="input w-full max-w-xs pl-9"
               type="date"
               value={leavingDate}
               min={minimumLeavingDate || undefined}
@@ -186,11 +186,12 @@ export default function ChangeWorkerStatusModal({
                 remains active for August and becomes inactive
                 from 1 September.
               </p>
-
-              <p>
+              <div className="w-fit rounded-lg border border-success/25 bg-success/10 px-3 py-2.5">
+              <p className="text-sm leading-relaxed text-success">
                 Their existing attendance and payroll history
                 will be preserved.
               </p>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { monthRange } from "./dates.js";
 import { ApiError } from "./ApiError.js";
+import { calculatePayroll, money } from "./payroll.js";
 
 // Converts a date to YYYY-MM-DD for date-only comparisons.
 function dateOnly(value) {
@@ -54,7 +55,6 @@ export async function getCompanyMonthlyReport(companyId, month) {
   }
 
   // Fetch all workers belonging to the company.
-  // Do not filter by attendance or a nonexistent isActive field.
   const workers = await prisma.worker.findMany({
     where: {
       companyId,
@@ -112,9 +112,6 @@ const reportWorkersSource = workers.filter((worker) => {
     )
   ).getUTCDate();
 
-  const money = (value) =>
-    Math.round((value + Number.EPSILON) * 100) / 100;
-
   const reportWorkers = reportWorkersSource.map((worker) => {
     const recordByDay = new Map(
       worker.workRecords.map((record) => [
@@ -168,21 +165,6 @@ const reportWorkersSource = workers.filter((worker) => {
         ? Number(worker.payrolls[0].hourlyRate)
         : null;
 
-    const grossPay =
-      hourlyRate === null
-        ? null
-        : money(totalHours * hourlyRate);
-
-    const absenceDeduction =
-      hourlyRate === null
-        ? null
-        : money(Math.max(0, absentDays - 2) * 25);
-
-    const netPay =
-      grossPay === null
-        ? null
-        : money(grossPay - absenceDeduction);
-
     const totalAdvances = money(
       worker.advancePayments.reduce(
         (sum, advance) => sum + Number(advance.amount),
@@ -190,10 +172,19 @@ const reportWorkersSource = workers.filter((worker) => {
       )
     );
 
-    const remainingPay =
-      netPay === null
-        ? null
-        : money(netPay - totalAdvances);
+    const payroll = calculatePayroll({
+      totalHours,
+      absentDays,
+      hourlyRate,
+      totalAdvances,
+    });
+
+    const {
+      grossPay,
+      absenceDeduction,
+      netPay,
+      remainingPay,
+    } = payroll;
 
     const roles = [
       ...new Set(
