@@ -1,5 +1,5 @@
 
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, } from "pdf-lib";
 import { prisma } from "../lib/prisma.js";
 import { readFile } from "../lib/storage.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -46,6 +46,45 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
   });
 
   const byType = new Map(documents.map((doc) => [doc.type, doc]));
+
+  const readStartedAt = performance.now();
+
+const loadedDocuments = await Promise.all(
+  documents.map(async (doc) => {
+    const startedAt = performance.now();
+
+    try {
+      const bytes = await readFile(doc.storageKey);
+
+      console.log(
+        `[Worker PDF] ${doc.type}: ${
+          (performance.now() - startedAt).toFixed(0)
+        } ms, ${(bytes.length / 1024).toFixed(0)} KB`,
+      );
+
+      return [doc.type, bytes];
+    } catch (error) {
+      console.error(
+        `[Worker PDF] ${doc.type} failed after ${
+          (performance.now() - startedAt).toFixed(0)
+        } ms`,
+        error,
+      );
+
+      return [doc.type, null];
+    }
+  }),
+);
+
+const documentBytes = new Map(loadedDocuments);
+
+console.log(
+  `[Worker PDF] Storage reads: ${(
+    performance.now() - readStartedAt
+  ).toFixed(0)} ms`,
+);
+
+  const pdfStartedAt = performance.now();
 
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -195,17 +234,25 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
   }
 
   // Preserve all pages of a source PDF.
-  async function appendPdfDocument(bytes) {
-    const source = await PDFDocument.load(bytes);
-    const copiedPages = await pdf.copyPages(
-      source,
-      source.getPageIndices(),
-    );
+async function appendPdfDocument(bytes) {
+  const startedAt = performance.now();
 
-    for (const page of copiedPages) {
-      pdf.addPage(page);
-    }
+  const source = await PDFDocument.load(bytes);
+  const copiedPages = await pdf.copyPages(
+    source,
+    source.getPageIndices(),
+  );
+
+  for (const page of copiedPages) {
+    pdf.addPage(page);
   }
+
+  console.log(
+    `[Worker PDF] PDF merge: ${(
+      performance.now() - startedAt
+    ).toFixed(0)} ms, pages=${copiedPages.length}`,
+  );
+}
 
   // --------------------------------------------------
   // PAGE 1: Worker profile + passport
@@ -265,17 +312,19 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
 
   if (photo) {
     try {
-      const photoBytes = await readFile(photo.storageKey);
+      const photoBytes = documentBytes.get("PHOTO");
 
-      await drawDocumentImage(
-        cover,
-        photoBytes,
-        photo.mimeType,
-        width - margin - 145,
-        560,
-        145,
-        160,
-      );
+if (photoBytes) {
+  await drawDocumentImage(
+    cover,
+    photoBytes,
+    photo.mimeType,
+    width - margin - 145,
+    560,
+    145,
+    160,
+  );
+}
     } catch (error) {
       console.error(
         `Could not read worker photo ${workerId}`,
@@ -297,12 +346,13 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
     navy,
   );
 
-  const passport = byType.get("PASSPORT");
+const passport = byType.get("PASSPORT");
 
-  if (passport) {
-    try {
-      const passportBytes = await readFile(passport.storageKey);
+if (passport) {
+  try {
+    const passportBytes = documentBytes.get("PASSPORT");
 
+    if (passportBytes) {
       if (
         passport.mimeType === "image/jpeg" ||
         passport.mimeType === "image/png"
@@ -318,28 +368,27 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
           320,
         );
       } else if (passport.mimeType === "application/pdf") {
-        // PDF pages cannot be drawn directly onto an existing page
-        // using pdf-lib. Preserve the passport PDF pages separately.
+        // Preserve all passport PDF pages.
         await appendPdfDocument(passportBytes);
       }
-    } catch (error) {
-      console.error(
-        `Could not include passport for worker ${workerId}`,
-        error,
-      );
     }
-  } else {
-    drawText(
-      cover,
-      "Passport document not available",
-      margin,
-      470,
-      10,
-      false,
-      muted,
+  } catch (error) {
+    console.error(
+      `Could not include passport for worker ${workerId}`,
+      error,
     );
   }
-
+} else {
+  drawText(
+    cover,
+    "Passport document not available",
+    margin,
+    470,
+    10,
+    false,
+    muted,
+  );
+}
   drawFooter(cover, 1);
 
   // --------------------------------------------------
@@ -406,7 +455,9 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
     const doc = byType.get(type);
 
     try {
-      const bytes = await readFile(doc.storageKey);
+      const bytes = documentBytes.get(type);
+
+      if (!bytes) continue;
 
       if (
         doc.mimeType === "image/jpeg" ||
@@ -433,7 +484,21 @@ export const downloadWorkerPdf = asyncHandler(async (req, res) => {
   await flushImageDocs();
 
   // Save and return the final PDF.
-  const bytes = await pdf.save();
+  const saveStartedAt = performance.now();
+
+const bytes = await pdf.save();
+
+console.log(
+  `[Worker PDF] Serialization: ${(
+    performance.now() - saveStartedAt
+  ).toFixed(0)} ms`,
+);
+
+console.log(
+  `[Worker PDF] PDF processing total: ${(
+    performance.now() - pdfStartedAt
+  ).toFixed(0)} ms`,
+);
 
   res.setHeader("Content-Type", "application/pdf");
   const shortName = worker.name.trim().split(/\s+/).slice(0, 2).join(" ");

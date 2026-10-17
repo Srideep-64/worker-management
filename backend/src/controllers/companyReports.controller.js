@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
@@ -110,7 +110,6 @@ export const exportCompanyMonthlyExcel = asyncHandler(
     const month = req.query.month || currentMonthString();
     const displayMonth = formatReportMonth(month);
 
-    // Also validates that the company exists.
     const report = await getCompanyMonthlyReport(
       req.params.id,
       month
@@ -125,85 +124,245 @@ export const exportCompanyMonthlyExcel = asyncHandler(
         { length: report.daysInMonth },
         (_, index) => `${index + 1}`
       ),
-      "Total Hours",
-      "Worked Days",
-      "Absent Days",
-      "Holidays",
-      "Weekly Offs",
+      "Total Hrs",
+      "A",
+      "H",
+      "W",
     ];
 
     const rows = report.workers.map((worker, index) => [
-    index+1,
-    worker.workerCode,
-    worker.name,
-    worker.role,
-    ...worker.dailyRecords.map((day) => {
+      index + 1,
+      worker.workerCode,
+      worker.name,
+      worker.roleCode,
+      ...worker.dailyRecords.map((day) => {
         if (!day.status) return "—";
-
         if (day.status === "WORKED") return day.hours ?? 0;
         if (day.status === "ABSENT") return "A";
         if (day.status === "WEEKLY_OFF") return "W";
         if (day.status === "HOLIDAY") return "H";
-
         return "—";
-    }),
-    worker.totalHours,
-    worker.workedDays,
-    worker.absentDays,
-    worker.holidays,
-    worker.weeklyOffs,
+      }),
+      worker.totalHours,
+      worker.absentDays,
+      worker.holidays,
+      worker.weeklyOffs,
     ]);
 
-    const worksheet = XLSX.utils.aoa_to_sheet([
-    [`${report.company.name} — ${displayMonth} Attendance`],
-    [`Company Code: ${report.company.code}`],
-    [`Reporting Month: ${displayMonth}`],
-   [
-    `Generated At: ${
-        new Intl.DateTimeFormat("en-AE", {
-        timeZone: "Asia/Dubai",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-        }).format(report.generatedAt)
-    } UAE time`,
-    ],
-    [],
-    headers,
-    ...rows,
-    ]);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "UAE Labor Management Portal";
+    workbook.created = report.generatedAt;
 
-    worksheet["!cols"] = [
-      { wch: 7}, // S.No
-      { wch: 16 },// Worker Id
-      { wch: 24 },// Worker Name
-      { wch: 20 },// Role
-      ...Array.from(
-        { length: report.daysInMonth },
-        () => ({ wch: 8 })
-      ),
-      { wch: 13 },
-      { wch: 13 },
-      { wch: 13 },
-      { wch: 12 },
-      { wch: 13 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      "Monthly Attendance"
+    const worksheet = workbook.addWorksheet(
+      "Monthly Attendance",
+      {
+        views: [{ showGridLines: false }],
+      }
     );
 
-    const buffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
+    const totalColumns = headers.length;
+    const lastColumn = totalColumns;
+    const headerRowNumber = 6;
+    const firstDataRow = 7;
+
+    // Column widths.
+    worksheet.columns = [
+      { width: 7 },  // S.No.
+      { width: 12 }, // Worker ID
+      { width: 26 }, // Worker Name
+      { width: 12 }, // Role
+      ...Array.from(
+        { length: report.daysInMonth },
+        () => ({ width: 5 })
+      ),
+      { width: 11 }, // Total Hrs
+      { width: 6 },  // A
+      { width: 6 },  // H
+      { width: 6 },  // W
+    ];
+
+    // Report heading rows: one merged cell across the report.
+    const generatedAt = new Intl.DateTimeFormat("en-AE", {
+      timeZone: "Asia/Dubai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(report.generatedAt);
+
+    const headingRows = [
+      `${report.company.name} — ${displayMonth} Attendance`,
+      `Company Code: ${report.company.code}`,
+      `Reporting Month: ${displayMonth}`,
+      `Generated At: ${generatedAt} UAE time`,
+    ];
+
+    headingRows.forEach((text, index) => {
+      const rowNumber = index + 1;
+
+      worksheet.mergeCells(
+        rowNumber,
+        1,
+        rowNumber,
+        lastColumn
+      );
+
+      const cell = worksheet.getCell(rowNumber, 1);
+      cell.value = text;
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
+
+      cell.font = {
+        name: "Arial",
+        size: index === 0 ? 16 : 10,
+        bold: index < 2,
+        color: {
+          argb: index === 0 ? "FF1C2127" : "FF555555",
+        },
+      };
+
+      worksheet.getRow(rowNumber).height =
+        index === 0 ? 30 : 22;
     });
+
+    // Blank row between report headings and attendance table.
+    worksheet.getRow(5).height = 10;
+
+    // Attendance table header.
+    const headerRow = worksheet.getRow(headerRowNumber);
+    headerRow.values = headers;
+    headerRow.height = 26;
+
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        name: "Arial",
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+        size: 9,
+      };
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF303946" },
+      };
+
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true,
+      };
+
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFADB5BD" } },
+        bottom: { style: "thin", color: { argb: "FFADB5BD" } },
+        left: { style: "thin", color: { argb: "FFADB5BD" } },
+        right: { style: "thin", color: { argb: "FFADB5BD" } },
+      };
+    });
+
+    // Attendance rows.
+    rows.forEach((values, index) => {
+      const rowNumber = firstDataRow + index;
+      const row = worksheet.getRow(rowNumber);
+      row.values = values;
+      row.height = 20;
+
+      row.eachCell((cell) => {
+        cell.font = {
+          name: "Arial",
+          size: 9,
+          color: { argb: "FF1C2127" },
+        };
+
+        cell.alignment = {
+          horizontal: "center",
+          vertical: "middle",
+        };
+
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFD9DEE5" } },
+          bottom: { style: "thin", color: { argb: "FFD9DEE5" } },
+          left: { style: "thin", color: { argb: "FFD9DEE5" } },
+          right: { style: "thin", color: { argb: "FFD9DEE5" } },
+        };
+      });
+
+      // Keep worker names left-aligned for readability.
+      row.getCell(3).alignment = {
+        horizontal: "left",
+        vertical: "middle",
+      };
+    });
+
+    // Highlight Sundays, from the day header through the last worker.
+    // Day columns begin at column 5.
+    for (let day = 1; day <= report.daysInMonth; day++) {
+      const date = new Date(
+        Number(month.slice(0, 4)),
+        Number(month.slice(5, 7)) - 1,
+        day
+      );
+
+      if (date.getDay() !== 0) continue;
+
+      const columnNumber = 4 + day;
+
+      for (
+        let rowNumber = headerRowNumber;
+        rowNumber <= headerRowNumber + rows.length;
+        rowNumber++
+      ) {
+        const cell = worksheet.getCell(
+          rowNumber,
+          columnNumber
+        );
+
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFEB99" },
+        };
+
+        // Keep the Sunday header bold and readable.
+        if (rowNumber === headerRowNumber) {
+          cell.font = {
+            name: "Arial",
+            bold: true,
+            size: 9,
+            color: { argb: "FF1C2127" },
+          };
+        }
+      }
+    }
+
+    // Freeze the headings and the table header while scrolling.
+    worksheet.views = [
+      {
+        state: "frozen",
+        ySplit: headerRowNumber,
+        showGridLines: false,
+      },
+    ];
+
+    // Keep the used report area as the print area.
+    worksheet.pageSetup = {
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      printArea: `A1:${worksheet.getColumn(lastColumn).letter}${Math.max(
+        headerRowNumber,
+        headerRowNumber + rows.length
+      )}`,
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
 
     const filename =
       `attendance-${report.company.code}-${month}.xlsx`;
@@ -212,12 +371,13 @@ export const exportCompanyMonthlyExcel = asyncHandler(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${filename}"`
     );
 
-    res.send(buffer);
+    res.send(Buffer.from(buffer));
   }
 );
 

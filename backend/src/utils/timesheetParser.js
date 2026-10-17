@@ -49,12 +49,50 @@ function isWorkerActiveForMonth(worker, periodDate) {
 // Array-of-arrays mode, rather than the object mode sheet_to_json normally
 // offers, so header matching can be done case-insensitively (WORKER_ID vs
 // worker_id vs Worker_Id) instead of requiring an exact key match.
+
 function sheetToRows(sheet) {
-  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: undefined });
-  const headerRow = (raw[0] || []).map((h) => (h === undefined || h === null ? "" : String(h).trim()));
-  const dataRows = raw.slice(1);
-  return { headerRow, dataRows };
+  const raw = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: true,
+    defval: undefined,
+  });
+
+  // Find the actual table header, allowing report title rows above it.
+  const headerIndex = raw.findIndex((row) => {
+    const headers = (row || []).map((cell) =>
+      cell == null ? "" : String(cell).trim().toUpperCase()
+    );
+
+    const hasWorkerId = headers.includes("WORKER_ID") ||
+      headers.includes("WORKER ID");
+
+    const hasRole = headers.includes("ROLE");
+    const hasDayColumns = headers.some((header) => /^\d+$/.test(header));
+
+    return hasWorkerId && hasRole && hasDayColumns;
+  });
+
+  if (headerIndex === -1) {
+    return {
+      headerRow: (raw[0] || []).map((cell) =>
+        cell == null ? "" : String(cell).trim()
+      ),
+      dataRows: raw.slice(1),
+      headerIndex:0,
+    };
+  }
+
+  const headerRow = (raw[headerIndex] || []).map((cell) =>
+    cell == null ? "" : String(cell).trim()
+  );
+
+  return {
+    headerRow,
+    dataRows: raw.slice(headerIndex + 1),
+    headerIndex,
+  };
 }
+
 
 function colIndex(headerRow, name) {
   return headerRow.findIndex((h) => h.toUpperCase() === name.toUpperCase());
@@ -62,6 +100,48 @@ function colIndex(headerRow, name) {
 
 function isBlankRow(row) {
   return !row || row.length === 0 || row.every((c) => c === undefined || c === "");
+}
+
+
+function parseDayCellValue(raw) {
+  if (raw === undefined || raw === null || raw === "") {
+    return { kind: "blank" };
+  }
+
+  if (typeof raw === "number") {
+    if (raw < 0 || raw > 24) {
+      return {
+        kind: "error",
+        message: `Hours ${raw} is out of the 0–24 range`,
+      };
+    }
+
+    return { kind: "hours", value: raw };
+  }
+
+  const s = String(raw).trim().toUpperCase();
+
+  if (s in SHORTHAND_STATUS) {
+    return { kind: "status", value: SHORTHAND_STATUS[s] };
+  }
+
+  const asNumber = Number(s);
+
+  if (s !== "" && !Number.isNaN(asNumber)) {
+    if (asNumber < 0 || asNumber > 24) {
+      return {
+        kind: "error",
+        message: `Hours ${asNumber} is out of the 0–24 range`,
+      };
+    }
+
+    return { kind: "hours", value: asNumber };
+  }
+
+  return {
+    kind: "error",
+    message: `"${raw}" is not recognized — expected a number of hours (0–24), or A/H/W`,
+  };
 }
 
 /**
@@ -73,61 +153,55 @@ function isBlankRow(row) {
 export function parseAndValidateWorkbook(workbook, context) {
   const firstSheetName = workbook.SheetNames[0];
   const firstSheet = workbook.Sheets[firstSheetName];
-  const { headerRow } = sheetToRows(firstSheet);
 
-  const hasDateColumn = colIndex(headerRow, "DATE") !== -1;
+  if (!firstSheet) {
+    return {
+      format: "UNKNOWN",
+      errors: [{
+        sheet: firstSheetName || "Sheet1",
+        row: 1,
+        field: null,
+        message: "Workbook has no readable first sheet.",
+      }],
+      records: [],
+    };
+  }
+
+  const { headerRow} = sheetToRows(firstSheet);
+
   const hasDayColumns = headerRow.some((h) => /^\d+$/.test(h));
 
-  if (hasDateColumn) {
-    return parseFormatDaily(firstSheet, context);
-  }
-  if (hasDayColumns) {
-    const overrideSheetName = workbook.SheetNames.find((n) => /override/i.test(n));
-    const overrideSheet = overrideSheetName ? workbook.Sheets[overrideSheetName] : null;
-    return parseFormatWide(firstSheet, overrideSheet, context);
-  }
-
-  return {
-    format: "UNKNOWN",
-    errors: [
-      {
+  if (!hasDayColumns) {
+    return {
+      format: "UNKNOWN",
+      errors: [{
         sheet: firstSheetName,
         row: 1,
         field: null,
-        message:
-          "Could not recognize this sheet as either the monthly wide format (numbered day columns, 1–31) or the daily format (a DATE column). Check the header row.",
-      },
-    ],
-    records: [],
-  };
-}
-
-// Parses a single day cell in the wide format, where one cell encodes either
-// hours worked or a status shorthand. Distinguishes "blank" from "0" from
-// "invalid" — the caller decides what each of those means.
-function parseDayCellValue(raw) {
-  if (raw === undefined || raw === null || raw === "") return { kind: "blank" };
-
-  if (typeof raw === "number") {
-    if (raw < 0 || raw > 24) return { kind: "error", message: `Hours ${raw} is out of the 0–24 range` };
-    return { kind: "hours", value: raw };
+        message: "Expected a monthly attendance sheet with numbered day columns.",
+      }],
+      records: [],
+    };
   }
 
-  const s = String(raw).trim().toUpperCase();
-  if (s in SHORTHAND_STATUS) return { kind: "status", value: SHORTHAND_STATUS[s] };
+  const overrideSheetName = workbook.SheetNames.find(
+    (name) => /override/i.test(name)
+  );
 
-  const asNumber = Number(s);
-  if (s !== "" && !Number.isNaN(asNumber)) {
-    if (asNumber < 0 || asNumber > 24) return { kind: "error", message: `Hours ${asNumber} is out of the 0–24 range` };
-    return { kind: "hours", value: asNumber };
-  }
+  const overrideSheet = overrideSheetName
+    ? workbook.Sheets[overrideSheetName]
+    : null;
 
-  return { kind: "error", message: `"${raw}" is not recognized — expected a number of hours (0–24), or A/H/W` };
+  return parseFormatWide(firstSheet, overrideSheet, context);
 }
 
 function parseFormatWide(sheet, overrideSheet, { periodDate, workersByCode,  rolesByCode }) {
-  const { headerRow, dataRows } = sheetToRows(sheet);
-  const idxWorkerId = colIndex(headerRow, "WORKER_ID");
+  const { headerRow, dataRows, headerIndex } = sheetToRows(sheet);
+  const idxWorkerId =
+    colIndex(headerRow, "WORKER_ID") !== -1
+      ? colIndex(headerRow, "WORKER_ID")
+      : colIndex(headerRow, "WORKER ID");
+
   const idxRole = colIndex(headerRow, "ROLE");
   
   const dayColumns = headerRow
@@ -185,7 +259,7 @@ if (missingDays.length > 0) {
 
   dataRows.forEach((row, i) => {
     if (isBlankRow(row)) return;
-    const rowNum = i + 2; // +1 for 0-index, +1 for the header row
+    const rowNum = i + headerIndex + 2; // +1 for 0-index, +1 for the header row
 
     const workerCode = row[idxWorkerId] !== undefined ? String(row[idxWorkerId]).trim() : "";
     const baseRoleCode = row[idxRole] !== undefined ? String(row[idxRole]).trim() : "";
@@ -286,7 +360,7 @@ function parseRoleOverrideSheet(overrideSheet, rolesByCode, errors) {
   const overrides = new Map();
   if (!overrideSheet) return overrides;
 
-  const { headerRow, dataRows } = sheetToRows(overrideSheet);
+  const { headerRow, dataRows, headerIndex } = sheetToRows(overrideSheet);
   const idxWorker = colIndex(headerRow, "WORKER_ID");
   const idxDate = colIndex(headerRow, "DATE");
   const idxRole = colIndex(headerRow, "ROLE");
@@ -298,7 +372,7 @@ function parseRoleOverrideSheet(overrideSheet, rolesByCode, errors) {
 
   dataRows.forEach((row, i) => {
     if (isBlankRow(row)) return;
-    const rowNum = i + 2;
+    const rowNum = i + headerIndex + 2;
 
     const workerCode = row[idxWorker] !== undefined ? String(row[idxWorker]).trim() : "";
     const roleCode = row[idxRole] !== undefined ? String(row[idxRole]).trim() : "";
@@ -323,155 +397,4 @@ function parseRoleOverrideSheet(overrideSheet, rolesByCode, errors) {
   });
 
   return overrides;
-}
-
-function parseFormatDaily(sheet, { periodDate, workersByCode, rolesByCode }) {
-  const { headerRow, dataRows } = sheetToRows(sheet);
-  const idx = {
-    WORKER_ID: colIndex(headerRow, "WORKER_ID"),
-    DATE: colIndex(headerRow, "DATE"),
-    ROLE: colIndex(headerRow, "ROLE"),
-    HOURS: colIndex(headerRow, "HOURS"),
-    STATUS: colIndex(headerRow, "STATUS"),
-  };
-  const missing = Object.entries(idx).filter(([, v]) => v === -1).map(([k]) => k);
-  if (missing.length) {
-    return {
-      format: "DAILY",
-      errors: [{ sheet: "Sheet1", row: 1, field: null, message: `Missing required column(s): ${missing.join(", ")}` }],
-      records: [],
-    };
-  }
-
-  const errors = [];
-  const records = [];
-  const seenWorkerDate = new Set();
-  const monthDays = daysInMonth(periodDate);
-  const monthStart = new Date(Date.UTC(periodDate.getUTCFullYear(), periodDate.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(periodDate.getUTCFullYear(), periodDate.getUTCMonth(), monthDays));
-
-  dataRows.forEach((row, i) => {
-    if (isBlankRow(row)) return;
-    const rowNum = i + 2;
-
-    const workerCode = row[idx.WORKER_ID] !== undefined ? String(row[idx.WORKER_ID]).trim() : "";
-    const roleCode = row[idx.ROLE] !== undefined ? String(row[idx.ROLE]).trim() : "";
-    const dateRaw = row[idx.DATE];
-    const hoursRaw = row[idx.HOURS];
-    const statusRaw = row[idx.STATUS];
-
-    if (!workerCode) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: "Missing worker ID" });
-      return;
-    }
-    const worker = workersByCode[workerCode];
-    if (!worker) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "WORKER_ID", message: `Unknown worker ID "${workerCode}" for this company` });
-      return;
-    }
-
-    if (!isWorkerActiveForMonth(worker, periodDate)) {
-      errors.push({
-        sheet: "Sheet1",
-        row: rowNum,
-        field: "WORKER_ID",
-        message: `Worker "${workerCode}" is not active for the selected reporting month`,
-      });
-      return;
-    }
-
-    if (dateRaw === undefined || dateRaw === "") {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "DATE", message: "Missing date" });
-      return;
-    }
-    const workDate = dateRaw instanceof Date ? dateRaw : new Date(dateRaw);
-    if (Number.isNaN(workDate.getTime())) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "DATE", message: `Invalid date "${dateRaw}"` });
-      return;
-    }
-    if (workDate < monthStart || workDate > monthEnd) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "DATE", message: `Date ${isoDate(workDate)} is outside the selected month` });
-      return;
-    }
-    const leavingDate = worker.leavingDate
-  ? isoDate(new Date(worker.leavingDate))
-  : null;
-
-const requestedWorkDate = isoDate(workDate);
-
-if (leavingDate && requestedWorkDate > leavingDate) {
-  errors.push({
-    sheet: "Sheet1",
-    row: rowNum,
-    field: `Day ${day}`,
-    message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
-  });
-  return;
-}
-
-    const dedupeKey = `${workerCode}|${isoDate(workDate)}`;
-    if (seenWorkerDate.has(dedupeKey)) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "DATE", message: `Duplicate record for worker ${workerCode} on ${isoDate(workDate)}` });
-      return;
-    }
-    seenWorkerDate.add(dedupeKey);
-
-    if (!roleCode) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "ROLE", message: "Missing role" });
-      return;
-    }
-    if (!(roleCode in rolesByCode)) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "ROLE", message: `Unknown role code "${roleCode}" — role codes are never auto-corrected` });
-      return;
-    }
-
-    let status = statusRaw !== undefined && statusRaw !== "" ? String(statusRaw).trim().toUpperCase() : "";
-    if (status in SHORTHAND_STATUS) status = SHORTHAND_STATUS[status];
-
-    if (!status) {
-      // No STATUS given at all. Rather than silently assuming WORKED, only
-      // infer it when HOURS is unambiguously present — otherwise this is a
-      // missing-value error like any other.
-      if (hoursRaw === undefined || hoursRaw === "") {
-        errors.push({ sheet: "Sheet1", row: rowNum, field: "STATUS", message: "Missing status (and no hours to infer WORKED from)" });
-        return;
-      }
-      status = "WORKED";
-    }
-    if (!VALID_STATUS_WORDS.has(status)) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "STATUS", message: `Unrecognized status "${statusRaw}" — expected WORKED/ABSENT/HOLIDAY/WEEKLY_OFF or A/H/W` });
-      return;
-    }
-
-    let hours = null;
-    if (status === "WORKED") {
-      if (hoursRaw === undefined || hoursRaw === "") {
-        errors.push({ sheet: "Sheet1", row: rowNum, field: "HOURS", message: "Hours is required when status is WORKED" });
-        return;
-      }
-      const n = Number(hoursRaw);
-      if (Number.isNaN(n)) {
-        errors.push({ sheet: "Sheet1", row: rowNum, field: "HOURS", message: `"${hoursRaw}" is not a number` });
-        return;
-      }
-      if (n < 0 || n > 24) {
-        errors.push({ sheet: "Sheet1", row: rowNum, field: "HOURS", message: `Hours ${n} is out of the 0–24 range` });
-        return;
-      }
-      hours = n;
-    } else if (hoursRaw !== undefined && hoursRaw !== "" && Number(hoursRaw) !== 0) {
-      errors.push({ sheet: "Sheet1", row: rowNum, field: "HOURS", message: `Hours should be blank when status is ${status}` });
-      return;
-    }
-
-    records.push({
-      workerId: worker.id,
-      roleId: rolesByCode[roleCode].id,
-      workDate,
-      hours,
-      status,
-    });
-  });
-
-  return { format: "DAILY", errors, records };
 }

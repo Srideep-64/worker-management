@@ -5,8 +5,6 @@ export default function WorkerPdfDownload({ workerId, workerCode }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
 
-  
-
   async function handleDownload() {
     if (downloading) return;
 
@@ -16,26 +14,22 @@ export default function WorkerPdfDownload({ workerId, workerCode }) {
     let objectUrl;
 
     try {
-      const pdfPath =
-  `/api/workers/${encodeURIComponent(workerId)}/pdf`;
+      const pdfPath = `/api/workers/${encodeURIComponent(workerId)}/pdf`;
 
-const response = await fetch(pdfPath, {
-  method: "GET",
-  credentials: "include",
-  headers: {
-    Accept: "application/pdf",
-  },
-});
+      const response = await fetch(pdfPath, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          Accept: "application/pdf",
+        },
+      });
 
       if (!response.ok) {
         let message = `Download failed (${response.status})`;
 
         try {
           const payload = await response.json();
-          message =
-            payload?.error?.message ||
-            payload?.message ||
-            message;
+          message = payload?.error?.message || payload?.message || message;
         } catch {
           // The error response was not JSON.
         }
@@ -48,21 +42,21 @@ const response = await fetch(pdfPath, {
       if (blob.size === 0) {
         throw new Error("The downloaded PDF is empty.");
       }
-    objectUrl = window.URL.createObjectURL(blob);
+      objectUrl = window.URL.createObjectURL(blob);
 
-    const link = document.createElement("a");
-    link.href = objectUrl;
+      const link = document.createElement("a");
+      link.href = objectUrl;
 
-    const disposition = response.headers.get("Content-Disposition");
-    const filenameMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
+      const disposition = response.headers.get("Content-Disposition");
+      const filenameMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
 
-    link.download = filenameMatch
-      ? decodeURIComponent(filenameMatch[1])
-      : "worker-documents.pdf";
+      link.download = filenameMatch
+        ? decodeURIComponent(filenameMatch[1])
+        : "worker-documents.pdf";
 
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
     } catch (err) {
       console.error("Worker PDF download failed:", err);
       setError(err.message || "Unable to download the worker PDF.");

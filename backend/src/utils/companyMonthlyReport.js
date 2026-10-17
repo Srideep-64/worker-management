@@ -194,10 +194,20 @@ const reportWorkersSource = workers.filter((worker) => {
       ),
     ];
 
+const roleCode =
+  dailyRecords.find((record) => {
+    const code = record.roleCode?.trim();
+
+    return (
+      code &&
+      !["W", "A", "H"].includes(code.toUpperCase())
+    );
+  })?.roleCode ?? "-";
+
     return {
       workerCode: worker.workerCode,
       name: worker.name,
-      role: roles.join(", ") || worker.jobTitle || "—",
+      roleCode,
       dailyRecords,
       totalHours,
       workedDays,

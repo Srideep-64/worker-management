@@ -83,72 +83,155 @@ export async function saveFile(
   return storageKey;
 }
 
+const FILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const FILE_CACHE_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+
+const fileCache = new Map();
+const pendingReads = new Map();
+
+let cachedBytes = 0;
+
+function getCachedFile(storageKey) {
+  const entry = fileCache.get(storageKey);
+
+  if (!entry) return null;
+
+  if (entry.expiresAt <= Date.now()) {
+    fileCache.delete(storageKey);
+    cachedBytes -= entry.bytes.length;
+    return null;
+  }
+
+  // Refresh insertion order for simple LRU eviction.
+  fileCache.delete(storageKey);
+  fileCache.set(storageKey, entry);
+
+  return entry.bytes;
+}
+
+function cacheFile(storageKey, bytes) {
+  if (bytes.length > FILE_CACHE_MAX_BYTES) return;
+
+  const existing = fileCache.get(storageKey);
+
+  if (existing) {
+    cachedBytes -= existing.bytes.length;
+    fileCache.delete(storageKey);
+  }
+
+  while (
+    cachedBytes + bytes.length > FILE_CACHE_MAX_BYTES &&
+    fileCache.size > 0
+  ) {
+    const oldestKey = fileCache.keys().next().value;
+    const oldest = fileCache.get(oldestKey);
+
+    fileCache.delete(oldestKey);
+    cachedBytes -= oldest.bytes.length;
+  }
+
+  fileCache.set(storageKey, {
+    bytes,
+    expiresAt: Date.now() + FILE_CACHE_TTL_MS,
+  });
+
+  cachedBytes += bytes.length;
+}
+
+export function invalidateFileCache(storageKey) {
+  const entry = fileCache.get(storageKey);
+
+  if (entry) {
+    fileCache.delete(storageKey);
+    cachedBytes -= entry.bytes.length;
+  }
+}
+
 export async function readFile(storageKey) {
-  if (env.STORAGE_PROVIDER === "cloudinary") {
+  if (env.STORAGE_PROVIDER !== "cloudinary") {
+    return fs.readFile(resolveWithinRoot(storageKey));
+  }
+
+  const cached = getCachedFile(storageKey);
+
+  if (cached) {
+    console.log(`[Storage] Cache HIT: ${storageKey}`);
+    return cached;
+  }
+
+  // Reuse an ongoing download for the same file.
+  const pending = pendingReads.get(storageKey);
+
+  if (pending) {
+    return pending;
+  }
+
+  const downloadPromise = (async () => {
+    const startedAt = performance.now();
+
     const dotIndex = storageKey.lastIndexOf(".");
 
     if (dotIndex === -1) {
-      throw new Error(
-        "Cloudinary raw file has no extension"
-      );
+      throw new Error("Cloudinary raw file has no extension");
     }
 
-    // For Cloudinary raw assets, the extension is
-    // part of the public_id.
     const publicId = storageKey;
-
     const format = storageKey.slice(dotIndex + 1);
 
-    // Signed URL valid for 5 minutes.
-    const expiresAt =
-      Math.floor(Date.now() / 1000) + 300;
-
-    const signedUrl =
-      cloudinary.utils.private_download_url(
-        publicId,
-        format,
-        {
-          resource_type: "raw",
-          type: "authenticated",
-          expires_at: expiresAt,
-        }
-      );
+    const signedUrl = cloudinary.utils.private_download_url(
+      publicId,
+      format,
+      {
+        resource_type: "raw",
+        type: "authenticated",
+        expires_at: Math.floor(Date.now() / 1000) + 300,
+      },
+    );
 
     const response = await fetch(signedUrl);
 
     if (!response.ok) {
       throw new Error(
-        `Failed to download Cloudinary asset: ${response.status}`
+        `Failed to download Cloudinary asset: ${response.status}`,
       );
     }
 
-    return Buffer.from(
-      await response.arrayBuffer()
-    );
-  }
+    const bytes = Buffer.from(await response.arrayBuffer());
 
-  return fs.readFile(
-    resolveWithinRoot(storageKey)
-  );
+    cacheFile(storageKey, bytes);
+
+    console.log(
+      `[Storage] Cloudinary download: ${storageKey}, ` +
+        `${(performance.now() - startedAt).toFixed(0)} ms, ` +
+        `${(bytes.length / 1024).toFixed(0)} KB`,
+    );
+
+    return bytes;
+  })();
+
+  pendingReads.set(storageKey, downloadPromise);
+
+  try {
+    return await downloadPromise;
+  } finally {
+    if (pendingReads.get(storageKey) === downloadPromise) {
+      pendingReads.delete(storageKey);
+    }
+  }
 }
 
 export async function deleteFile(storageKey) {
   if (env.STORAGE_PROVIDER === "cloudinary") {
-    await cloudinary.uploader.destroy(
-      storageKey,
-      {
-        resource_type: "raw",
-        type: "authenticated",
-      }
-    );
+    await cloudinary.uploader.destroy(storageKey, {
+      resource_type: "raw",
+      type: "authenticated",
+    });
 
+    invalidateFileCache(storageKey);
     return;
   }
 
-  await fs.rm(
-    resolveWithinRoot(storageKey),
-    {
-      force: true,
-    }
-  );
+  await fs.rm(resolveWithinRoot(storageKey), {
+    force: true,
+  });
 }
