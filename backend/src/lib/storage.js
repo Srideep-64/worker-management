@@ -155,7 +155,6 @@ export async function readFile(storageKey) {
   const cached = getCachedFile(storageKey);
 
   if (cached) {
-    console.log(`[Storage] Cache HIT: ${storageKey}`);
     return cached;
   }
 
@@ -200,11 +199,6 @@ export async function readFile(storageKey) {
 
     cacheFile(storageKey, bytes);
 
-    console.log(
-      `[Storage] Cloudinary download: ${storageKey}, ` +
-        `${(performance.now() - startedAt).toFixed(0)} ms, ` +
-        `${(bytes.length / 1024).toFixed(0)} KB`,
-    );
 
     return bytes;
   })();

@@ -1,6 +1,6 @@
-
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, FileSpreadsheet, FileText } from "lucide-react";
+import { Building2, FileSpreadsheet, FileText,LoaderCircle } from "lucide-react";
 
 import { api } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
@@ -76,6 +76,7 @@ async function downloadCompanyReport(companyId, month, format, companyCode) {
 }
 
 export default function CompanyMonthlyCard({ company, month }) {
+  const [downloading, setDownloading] = useState(false);
   const statsCacheKey = `${company.id}:${month}`;
 
   const { data, error, loading } = useFetch(
@@ -98,19 +99,26 @@ export default function CompanyMonthlyCard({ company, month }) {
   const totalHours = data?.summary?.totalHours ?? 0;
   const payroll = data?.payrollSummary;
 
-  function handleDownload(event, format) {
+  async function handleDownload(event, format) {
     event.preventDefault();
     event.stopPropagation();
 
-    // Prevent an unhandled promise rejection if a download fails.
-    downloadCompanyReport(
-      company.id,
-      month,
-      format,
-      company.code
-    ).catch((err) => {
+    if (loading || downloading) return;
+
+    setDownloading(true);
+
+    try {
+      await downloadCompanyReport(
+        company.id,
+        month,
+        format,
+        company.code
+      );
+    } catch (err) {
       window.alert(err.message || "Unable to download the report.");
-    });
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -178,20 +186,32 @@ export default function CompanyMonthlyCard({ company, month }) {
       <div className="mt-4 flex gap-2 border-t border-border pt-3">
         <button
           type="button"
+          disabled={loading || downloading}
           onClick={(event) => handleDownload(event, "excel")}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
         >
-          <FileSpreadsheet size={16} />
-          Excel
+          {downloading ? (
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+        ) : (
+          <FileSpreadsheet className="h-4 w-4" />
+        )}
+
+        {downloading ? "Preparing..." : "Excel"}
         </button>
 
         <button
           type="button"
+          disabled={loading || downloading}
           onClick={(event) => handleDownload(event, "pdf")}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
         >
-          <FileText size={16} />
-          PDF
+          {downloading ? (
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4" />
+        )}
+
+        {downloading ? "Preparing..." : "PDF"}
         </button>
       </div>
     </Link>

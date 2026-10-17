@@ -56,11 +56,6 @@ const loadedDocuments = await Promise.all(
     try {
       const bytes = await readFile(doc.storageKey);
 
-      console.log(
-        `[Worker PDF] ${doc.type}: ${
-          (performance.now() - startedAt).toFixed(0)
-        } ms, ${(bytes.length / 1024).toFixed(0)} KB`,
-      );
 
       return [doc.type, bytes];
     } catch (error) {
@@ -78,11 +73,6 @@ const loadedDocuments = await Promise.all(
 
 const documentBytes = new Map(loadedDocuments);
 
-console.log(
-  `[Worker PDF] Storage reads: ${(
-    performance.now() - readStartedAt
-  ).toFixed(0)} ms`,
-);
 
   const pdfStartedAt = performance.now();
 
@@ -483,22 +473,8 @@ if (passport) {
 
   await flushImageDocs();
 
-  // Save and return the final PDF.
-  const saveStartedAt = performance.now();
-
 const bytes = await pdf.save();
 
-console.log(
-  `[Worker PDF] Serialization: ${(
-    performance.now() - saveStartedAt
-  ).toFixed(0)} ms`,
-);
-
-console.log(
-  `[Worker PDF] PDF processing total: ${(
-    performance.now() - pdfStartedAt
-  ).toFixed(0)} ms`,
-);
 
   res.setHeader("Content-Type", "application/pdf");
   const shortName = worker.name.trim().split(/\s+/).slice(0, 2).join(" ");

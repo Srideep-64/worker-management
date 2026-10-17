@@ -253,56 +253,120 @@ export class WorkService {
     return serializeRecord(updated);
   }
 
-  static async createManualWorkBatch(workerId, submittedRecords) {
-    const normalizedRecords = submittedRecords.map((item) => {
-      const key = dateOnly(item.workDate);
-      if (!key) throw ApiError.badRequest("Every record must have a valid work date.");
-      return { ...item, dateKey: key, workDate: new Date(`${key}T00:00:00.000Z`) };
-    });
 
-    const seenDates = new Set();
-    for (const item of normalizedRecords) {
-      if (seenDates.has(item.dateKey)) {
-        throw ApiError.badRequest(`The batch contains more than one entry for ${item.dateKey}.`);
-      }
-      seenDates.add(item.dateKey);
+static async createManualWorkBatch(workerId, submittedRecords) {
+  if (!submittedRecords.length) {
+    throw ApiError.badRequest("At least one record is required.");
+  }
+
+  // 1. Normalize dates and reject duplicate dates.
+  const normalizedRecords = submittedRecords.map((item) => {
+    const key = dateOnly(item.workDate);
+
+    if (!key) {
+      throw ApiError.badRequest(
+        "Every record must have a valid work date."
+      );
     }
 
-    const month = normalizedRecords[0].dateKey.slice(0, 7);
-    if (normalizedRecords.some((item) => item.dateKey.slice(0, 7) !== month)) {
-      throw ApiError.badRequest("All records in a batch must belong to the same month.");
+    return {
+      ...item,
+      dateKey: key,
+      workDate: new Date(`${key}T00:00:00.000Z`),
+    };
+  });
+
+  const seenDates = new Set();
+
+  for (const item of normalizedRecords) {
+    if (seenDates.has(item.dateKey)) {
+      throw ApiError.badRequest(
+        `The batch contains more than one entry for ${item.dateKey}.`
+      );
     }
 
-    const monthStart = new Date(`${month}-01T00:00:00.000Z`);
+    seenDates.add(item.dateKey);
+  }
 
-    const savedRecords = await prisma.$transaction(async (tx) => {
+  const month = normalizedRecords[0].dateKey.slice(0, 7);
+
+  if (
+    normalizedRecords.some(
+      (item) => item.dateKey.slice(0, 7) !== month
+    )
+  ) {
+    throw ApiError.badRequest(
+      "All records in a batch must belong to the same month."
+    );
+  }
+
+  const monthStart = new Date(`${month}-01T00:00:00.000Z`);
+  const workDates = normalizedRecords.map((item) => item.workDate);
+
+  const savedRecords = await prisma.$transaction(
+    async (tx) => {
+      // 2. Validate worker and active timesheet.
       const worker = await tx.worker.findUnique({
         where: { id: workerId },
-        select: { id: true, companyId: true, joiningDate: true, leavingDate: true },
+        select: {
+          id: true,
+          companyId: true,
+          joiningDate: true,
+          leavingDate: true,
+        },
       });
 
-      if (!worker) throw ApiError.notFound("Worker not found.");
+      if (!worker) {
+        throw ApiError.notFound("Worker not found.");
+      }
 
       const activeTimesheet = await tx.timesheetUpload.findFirst({
-        where: { companyId: worker.companyId, periodMonth: monthStart, status: "ACTIVE" },
+        where: {
+          companyId: worker.companyId,
+          periodMonth: monthStart,
+          status: "ACTIVE",
+        },
         select: { id: true },
       });
 
       if (activeTimesheet) {
-        throw ApiError.conflict("This month is managed by an active timesheet. Manual records cannot be uploaded.");
+        throw ApiError.conflict(
+          "This month is managed by an active timesheet. Manual records cannot be uploaded."
+        );
       }
 
+      // 3. Fetch existing records without loading unnecessary relations.
       const existingRecords = await tx.workRecord.findMany({
-        where: { workerId, workDate: { in: normalizedRecords.map((item) => item.workDate) } },
-        include: RECORD_INCLUDE,
+        where: {
+          workerId,
+          workDate: { in: workDates },
+        },
+        select: {
+          id: true,
+          workDate: true,
+          roleId: true,
+          source: true,
+          uploadId: true,
+        },
       });
 
       const existingByDate = new Map(
-        existingRecords.map((record) => [dateOnly(record.workDate), record]),
+        existingRecords.map((record) => [
+          dateOnly(record.workDate),
+          record,
+        ])
       );
 
+      // 4. Validate all submitted records before writing anything.
       const plans = normalizedRecords.map((item) => {
-        const { dateKey, workDate, recordId, roleId, status, hours } = item;
+        const {
+          dateKey,
+          workDate,
+          recordId,
+          roleId,
+          status,
+          hours,
+        } = item;
 
         assertWorkDateWithinEmployment(worker, workDate);
         assertWorkDateNotInFuture(workDate);
@@ -312,58 +376,142 @@ export class WorkService {
 
         if (recordId) {
           if (!existing || existing.id !== recordId) {
-            throw ApiError.conflict(`The existing record for ${dateKey} has changed. Refresh attendance and try again.`);
+            throw ApiError.conflict(
+              `The existing record for ${dateKey} has changed. Refresh attendance and try again.`
+            );
           }
+
           if (existing.source !== "MANUAL" || existing.uploadId) {
-            throw ApiError.badRequest(`The timesheet record for ${dateKey} cannot be edited manually.`);
+            throw ApiError.badRequest(
+              `The timesheet record for ${dateKey} cannot be edited manually.`
+            );
           }
         } else if (existing) {
-          throw ApiError.conflict(`A record already exists for ${dateKey}. Refresh attendance before uploading.`);
+          throw ApiError.conflict(
+            `A record already exists for ${dateKey}. Refresh attendance before uploading.`
+          );
         }
 
         const nextRoleId = roleId ?? existing?.roleId;
-        if (!nextRoleId) throw ApiError.badRequest(`Select a role for the new record dated ${dateKey}.`);
+
+        if (!nextRoleId) {
+          throw ApiError.badRequest(
+            `Select a role for the new record dated ${dateKey}.`
+          );
+        }
 
         return {
-          existing, workDate, roleId: nextRoleId, status,
+          existing,
+          workDate,
+          roleId: nextRoleId,
+          status,
           hours: status === "WORKED" ? hours : null,
         };
       });
 
-      const roleIds = [...new Set(plans.map((item) => item.roleId))];
+      // 5. Validate all roles in one query.
+      const roleIds = [
+        ...new Set(plans.map((item) => item.roleId)),
+      ];
+
       const roles = await tx.role.findMany({
-        where: { id: { in: roleIds } }, select: { id: true },
+        where: { id: { in: roleIds } },
+        select: { id: true },
       });
 
-      const validRoleIds = new Set(roles.map((role) => role.id));
+      const validRoleIds = new Set(
+        roles.map((role) => role.id)
+      );
+
       for (const item of plans) {
         if (!validRoleIds.has(item.roleId)) {
-          throw ApiError.badRequest("One or more selected roles do not exist.");
+          throw ApiError.badRequest(
+            "One or more selected roles do not exist."
+          );
         }
       }
 
-      const results = [];
-      for (const item of plans) {
-        const data = { roleId: item.roleId, status: item.status, hours: item.hours };
-        const record = item.existing
-          ? await tx.workRecord.update({
-              where: { id: item.existing.id },
-              data,
-              include: RECORD_INCLUDE,
-            })
-          : await tx.workRecord.create({
-              data: { workerId, workDate: item.workDate, ...data, source: "MANUAL", uploadId: null },
-              include: RECORD_INCLUDE,
-            });
+      // 6. Separate inserts from updates.
+      const newRecords = plans.filter(
+        (item) => !item.existing
+      );
 
-        results.push(serializeRecord(record));
+      const existingPlans = plans.filter(
+        (item) => item.existing
+      );
+
+      // 7. Bulk-insert all new manual records in one query.
+      if (newRecords.length > 0) {
+        await tx.workRecord.createMany({
+          data: newRecords.map((item) => ({
+            workerId,
+            workDate: item.workDate,
+            roleId: item.roleId,
+            status: item.status,
+            hours: item.hours,
+            source: "MANUAL",
+            uploadId: null,
+          })),
+        });
       }
 
-      return results;
-    }, { maxWait: 10000, timeout: 20000 });
+      // 8. Update existing manual records.
+      // Keep these updates inside the same transaction.
+      for (const item of existingPlans) {
+        await tx.workRecord.update({
+          where: { id: item.existing.id },
+          data: {
+            roleId: item.roleId,
+            status: item.status,
+            hours: item.hours,
+          },
+        });
+      }
 
-    return { month, count: savedRecords.length, records: savedRecords };
-  }
+      // 9. Fetch all saved records and their relations once.
+      const records = await tx.workRecord.findMany({
+        where: {
+          workerId,
+          workDate: { in: workDates },
+        },
+        include: RECORD_INCLUDE,
+      });
+
+      // 10. Preserve the order of submitted records.
+      const recordsByDate = new Map(
+        records.map((record) => [
+          dateOnly(record.workDate),
+          record,
+        ])
+      );
+
+      return plans.map((item) => {
+        const record = recordsByDate.get(
+          dateOnly(item.workDate)
+        );
+
+        if (!record) {
+          throw new Error(
+            `Saved work record not found for ${dateOnly(item.workDate)}.`
+          );
+        }
+
+        return serializeRecord(record);
+      });
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    }
+  );
+
+  return {
+    month,
+    count: savedRecords.length,
+    records: savedRecords,
+  };
+}
+
 
   static async getCompanyStats(companyId, month = currentMonthString()) {
     const company = await prisma.company.findUnique({
