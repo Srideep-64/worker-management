@@ -362,7 +362,7 @@ export default function PayrollSummary({
                     type="number"
                     min="0"
                     max="100000"
-                    step="0.01"
+                    step="0.25"
                     value={hourlyRate}
                     onChange={(event) =>
                       setHourlyRate(event.target.value)

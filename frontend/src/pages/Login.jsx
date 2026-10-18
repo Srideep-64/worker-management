@@ -129,7 +129,7 @@ export default function Login() {
           )}
 
           <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Signing in&hellip;" : "Sign in"}
+            {submitting ? "Signing in...;" : "Sign in"}
           </button>
         </form>
 
