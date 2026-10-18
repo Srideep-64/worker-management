@@ -3,8 +3,12 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { monthSchema } from "../utils/dates.js";
 import { calculatePayroll } from "../utils/payroll.js";
+import {
+  monthSchema,
+  monthRange,
+  monthStartDate,
+} from "../utils/dates.js";
 
 export const payrollMonthSchema = z.object({
   month: monthSchema,
@@ -22,10 +26,6 @@ export const createAdvanceSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
-function monthStartDate(month) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return new Date(Date.UTC(year, monthNumber - 1, 1));
-}
 
 // GET /api/workers/:id/payroll?month=YYYY-MM
 
@@ -39,16 +39,11 @@ export const getWorkerPayroll = asyncHandler(async (req, res) => {
     throw ApiError.notFound("Worker not found");
   }
 
-  const month = req.query.month;
-  const payrollMonth = monthStartDate(month);
-  const nextMonth = new Date(
-    Date.UTC(
-      payrollMonth.getUTCFullYear(),
-      payrollMonth.getUTCMonth() + 1,
-      1,
-    ),
-  );
+  const { month } = payrollMonthSchema.parse(req.query);
 
+  const { start: payrollMonth, end: nextMonth } =
+    monthRange(month);
+    
   const [monthlyPayroll, advances, workRecords] =
     await Promise.all([
       prisma.workerPayroll.findUnique({
@@ -150,7 +145,9 @@ export const updateHourlyRate = asyncHandler(async (req, res) => {
     throw ApiError.notFound("Worker not found");
   }
 
-  const { month, hourlyRate } = req.body;
+  const { month, hourlyRate } =
+  updateHourlyRateSchema.parse(req.body);
+
   const payrollMonth = monthStartDate(month);
 
   const updated = await prisma.workerPayroll.upsert({
@@ -190,21 +187,28 @@ export const createAdvance = asyncHandler(async (req, res) => {
     throw ApiError.notFound("Worker not found");
   }
 
-    const advance = await prisma.advancePayment.create({
+  const {
+    payrollMonth,
+    amount,
+    paidAt,
+    note,
+  } = createAdvanceSchema.parse(req.body);
+
+  const advance = await prisma.advancePayment.create({
     data: {
-        workerId: worker.id,
-        payrollMonth: monthStartDate(req.body.payrollMonth),
-        amount: req.body.amount,
-        createdById: req.user.id,
-        ...(req.body.paidAt ? { paidAt: req.body.paidAt } : {}),
-        ...(req.body.note ? { note: req.body.note } : {}),
+      workerId: worker.id,
+      payrollMonth: monthStartDate(payrollMonth),
+      amount,
+      createdById: req.user.id,
+      ...(paidAt ? { paidAt } : {}),
+      ...(note ? { note } : {}),
     },
     include: {
-        createdBy: {
+      createdBy: {
         select: { name: true },
-        },
+      },
     },
-    });
+  });
 
   res.status(201).json({
     advance: {

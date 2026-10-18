@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Download, FileSpreadsheet, RefreshCw, Upload } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  RefreshCw,
+  TriangleAlert,
+  Upload,
+} from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
 import Badge from "../components/ui/Badge.jsx";
@@ -43,11 +49,13 @@ function UploadModal({ companies, onClose, onDone }) {
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState([]);
   const [result, setResult] = useState(null);
+  const [showManualConflictModal, setShowManualConflictModal] = useState(false);
 
   function resetForm() {
     setStep("form");
     setFile(null);
     setResult(null);
+    setShowManualConflictModal(false);
     setError("");
     setValidationErrors([]);
   }
@@ -70,12 +78,19 @@ function UploadModal({ companies, onClose, onDone }) {
     formData.append("file", file);
 
     try {
+   
     const response = await api.post("/timesheets/upload", formData);
 
     invalidateTimesheetCaches();
 
     setResult(response);
     setStep("preview");
+
+    // Open the conflict modal immediately after a successful upload
+    if ((response?.manualConflicts?.length ?? 0) > 0) {
+      setShowManualConflictModal(true);
+    }
+
     } catch (err) {
       const errors = getValidationErrors(err);
 
@@ -90,7 +105,7 @@ function UploadModal({ companies, onClose, onDone }) {
     }
   }
 
-  async function handleConfirm(replace = false) {
+  async function handleConfirm(replace = false, supersedeManual = false) {
     const uploadId = result?.upload?.id;
 
     if (!uploadId) {
@@ -102,7 +117,11 @@ function UploadModal({ companies, onClose, onDone }) {
     setError("");
 
     try {
-      await api.post(`/timesheets/${uploadId}/confirm`, { replace });
+      await api.post(`/timesheets/${uploadId}/confirm`, {
+        replace,
+        supersedeManual,
+      });
+      setShowManualConflictModal(false);
       onDone();
     } catch (err) {
       const errors = getValidationErrors(err);
@@ -110,6 +129,12 @@ function UploadModal({ companies, onClose, onDone }) {
       if (errors.length > 0 || err?.status === 422) {
         setValidationErrors(errors);
         setStep("errors");
+      } else if (err?.status === 409 && err?.details?.manualConflicts?.length) {
+        setResult((current) => ({
+          ...current,
+          manualConflicts: err.details.manualConflicts,
+        }));
+        setShowManualConflictModal(true);
       } else if (err?.status === 409 && !replace) {
         setError(
           "An active timesheet already exists for this company and month. Use Replace & import if this upload should supersede it."
@@ -121,7 +146,16 @@ function UploadModal({ companies, onClose, onDone }) {
       setBusy(false);
     }
   }
-    function getPreviousUaeMonth() {
+    function requestConfirm(replace = false) {
+    if ((result?.manualConflicts?.length ?? 0) > 0) {
+      setShowManualConflictModal(true);
+      return;
+    }
+
+    handleConfirm(replace, false);
+  }
+
+  function getPreviousUaeMonth() {
     const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Dubai",
       year: "numeric",
@@ -364,8 +398,13 @@ function UploadModal({ companies, onClose, onDone }) {
                     <tr
                       key={`${record.workerId ?? ""}-${record.workDate ?? ""}-${index}`}
                     >
-                      <td className="px-3 py-2">{record.workerId || "—"}</td>
-                      <td className="px-3 py-2">{record.roleId || "—"}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{record.workerId || "—"}</div>
+                        {record.workerName && (
+                          <div className="text-xs text-text-muted">{record.workerName}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{record.role || record.roleId || "—"}</td>
                       <td className="px-3 py-2">{formatDate(record.workDate)}</td>
                       <td className="px-3 py-2">{record.hours ?? "—"}</td>
                       <td className="px-3 py-2">{record.status || "—"}</td>
@@ -394,7 +433,7 @@ function UploadModal({ companies, onClose, onDone }) {
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => handleConfirm(true)}
+                onClick={() => requestConfirm(true)}
                 disabled={busy}
               >
                 {busy ? "Importing…" : "Replace & import"}
@@ -403,7 +442,7 @@ function UploadModal({ companies, onClose, onDone }) {
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => handleConfirm(false)}
+                onClick={() => requestConfirm(false)}
                 disabled={busy}
               >
                 {busy ? "Importing…" : "Confirm import"}
@@ -411,6 +450,104 @@ function UploadModal({ companies, onClose, onDone }) {
             )}
           </div>
         </div>
+      )}
+
+      {showManualConflictModal && (
+        <Modal
+          title="Manual work records found"
+          onClose={() => {
+            if (!busy) setShowManualConflictModal(false);
+          }}
+          wide
+        >
+          <div className="space-y-4">
+            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+              <TriangleAlert className="mt-0.5 h-6 w-6 shrink-0 text-amber-700" />
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  This timesheet overlaps with existing manual work records.
+                </p>
+                <p className="text-sm">
+                  Superseding will delete only the manual records for the same
+                  workers and dates that are included in this uploaded timesheet.
+                  Other manual records in the month will remain unchanged.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-border">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-paper px-3 py-2 text-sm">
+                <span className="font-medium">
+                  {result?.manualConflicts?.length ?? 0} conflicting record
+                  {(result?.manualConflicts?.length ?? 0) === 1 ? "" : "s"}
+                </span>
+                <span className="text-text-muted">
+                  {new Set((result?.manualConflicts ?? []).map((item) => item.workerCode)).size} affected worker
+                  {new Set((result?.manualConflicts ?? []).map((item) => item.workerCode)).size === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              <div className="max-h-60 overflow-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="sticky top-0 bg-paper text-xs uppercase tracking-wide text-text-muted">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Worker</th>
+                      <th className="px-3 py-2 font-medium">Date</th>
+                      <th className="px-3 py-2 font-medium">Existing manual record</th>
+                      <th className="px-3 py-2 font-medium">Uploaded record</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(result?.manualConflicts ?? []).map((item, index) => (
+                      <tr key={`${item.workerId}-${item.workDate}-${index}`}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{item.workerCode || "—"}</div>
+                          <div className="text-xs text-text-muted">{item.workerName || "—"}</div>
+                        </td>
+                        <td className="px-3 py-2">{formatDate(item.workDate)}</td>
+                        <td className="px-3 py-2">
+                          {item.existingStatus || "—"}
+                          {item.existingHours != null ? ` · ${item.existingHours} h` : ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          {item.uploadedStatus || "—"}
+                          {item.uploadedHours != null ? ` · ${item.uploadedHours} h` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {error && (
+              <p role="alert" className="text-sm text-danger">{error}</p>
+            )}
+
+            <p className="text-sm text-text-muted">
+              This action cannot be undone. Do you want to supersede these manual records?
+            </p>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-md border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => handleConfirm(result?.conflict ? true : false, true)}
+                disabled={busy}
+              >
+                {busy ? "Importing…" : "Supersede"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                onClick={() => setShowManualConflictModal(false)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </Modal>
   );

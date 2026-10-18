@@ -2,6 +2,11 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  currentUaeMonthString,
+  monthRange,
+  dateOnly,
+} from "../utils/dates.js";
 
 export const createCompanySchema = z.object({
   code: z.string().trim().min(1).max(10),
@@ -11,26 +16,11 @@ export const createCompanySchema = z.object({
 
 export const listCompanies = asyncHandler(async (req, res) => {
   // Use the current month in the UAE timezone.
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Dubai",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
+const month = currentUaeMonthString();
+const { start, end } = monthRange(month);
 
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value])
-  );
-
-  const month = `${values.year}-${values.month}`;
-  const [year, monthNumber] = month.split("-").map(Number);
-
-  const monthStart = `${month}-01`;
-
-  const nextMonthStart = new Date(
-    Date.UTC(year, monthNumber, 1)
-  )
-    .toISOString()
-    .slice(0, 10);
+const monthStart = dateOnly(start);
+const nextMonthStart = dateOnly(end);
 
   const companies = await prisma.company.findMany({
     orderBy: { code: "asc" },
@@ -46,9 +36,6 @@ export const listCompanies = asyncHandler(async (req, res) => {
       },
     },
   });
-
-  const dateOnly = (value) =>
-    value ? new Date(value).toISOString().slice(0, 10) : null;
 
   res.json({
     companies: companies.map((company) => {

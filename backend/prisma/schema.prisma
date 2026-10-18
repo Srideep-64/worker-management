@@ -119,7 +119,7 @@ model WorkRecord {
   createdAt DateTime         @default(now()) @map("created_at")
   source    WorkRecordSource @default(TIMESHEET)
   role      Role             @relation(fields: [roleId], references: [id])
-  upload    TimesheetUpload? @relation(fields: [uploadId], references: [id])
+  upload    TimesheetUpload? @relation(fields: [uploadId], references: [id], onDelete: Cascade)
   worker    Worker           @relation(fields: [workerId], references: [id])
 
   @@unique([workerId, workDate])

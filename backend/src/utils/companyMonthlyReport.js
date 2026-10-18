@@ -1,26 +1,15 @@
 import { prisma } from "../lib/prisma.js";
-import { monthRange } from "./dates.js";
+import { monthRange,dateOnly,daysInMonth } from "./dates.js";
 import { ApiError } from "./ApiError.js";
 import { calculatePayroll, money } from "./payroll.js";
 
 // Converts a date to YYYY-MM-DD for date-only comparisons.
-function dateOnly(value) {
-  if (!value) return null;
-
-  return new Date(value).toISOString().slice(0, 10);
-}
 
 function getWorkerStatusForMonth(worker, month) {
-  const [year, monthNumber] = month.split("-").map(Number);
+   const { start, end } = monthRange(month);
 
-  const selectedMonthStart =
-    `${year}-${String(monthNumber).padStart(2, "0")}-01`;
-
-  const nextMonthStart = new Date(
-    Date.UTC(year, monthNumber, 1)
-  )
-    .toISOString()
-    .slice(0, 10);
+  const selectedMonthStart = dateOnly(start);
+  const nextMonthStart = dateOnly(end);
 
   const joiningDate = dateOnly(worker.joiningDate);
   const leavingDate = dateOnly(worker.leavingDate);
@@ -104,13 +93,7 @@ const reportWorkersSource = workers.filter((worker) => {
   return getWorkerStatusForMonth(worker, month) === "ACTIVE";
 });
 
-  const daysInMonth = new Date(
-    Date.UTC(
-      Number(month.slice(0, 4)),
-      Number(month.slice(5, 7)),
-      0
-    )
-  ).getUTCDate();
+  const totalDays = daysInMonth(month);
 
   const reportWorkers = reportWorkersSource.map((worker) => {
     const recordByDay = new Map(
@@ -121,7 +104,7 @@ const reportWorkersSource = workers.filter((worker) => {
     );
 
     const dailyRecords = Array.from(
-      { length: daysInMonth },
+      { length: totalDays },
       (_, index) => {
         const day = index + 1;
         const record = recordByDay.get(day);
@@ -234,7 +217,7 @@ const roleCode =
   return {
     company,
     month,
-    daysInMonth,
+    daysInMonth :totalDays,
     generatedAt: new Date(),
     workers: reportWorkers,
 

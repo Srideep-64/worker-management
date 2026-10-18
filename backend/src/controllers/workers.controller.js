@@ -3,6 +3,11 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  currentUaeMonthString,
+  dateOnly,
+  monthRange,
+} from "../utils/dates.js";
 
 const dateString = z.coerce.date();
 const nullableDateString = dateString.nullable().optional();
@@ -13,7 +18,7 @@ export const createWorkerSchema = z.object({
     .trim()
     .regex(
       /^[A-Z]{2,4}\d{3,6}$/,
-      "Worker code must contain 2–4 uppercase letters followed by 5–6 digits",
+      "Worker code must contain 2–4 uppercase letters followed by 3–6 digits",
     ),
 
   companyId: z.string().uuid(),
@@ -70,80 +75,25 @@ export const listWorkersQuerySchema = z.object({
 }));
 
 
-// Use the UAE calendar date when deciding whether a worker has joined.
-function getUaeDateParts() {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Dubai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
-  );
-
-  return {
-    year: values.year,
-    month: values.month,
-    day: values.day,
-  };
-}
-
-// Prisma returns Date objects for DateTime fields.
-// Format them as YYYY-MM-DD without using the server's local timezone.
-function dateOnly(value) {
-  if (!value) return null;
-
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toISOString().slice(0, 10);
-}
-
-function getUaeCalendarDates() {
-  const { year, month, day } = getUaeDateParts();
-
-  return {
-    todayString: `${year}-${month}-${day}`,
-    monthStartString: `${year}-${month}-01`,
-  };
-}
-
 // A leaving date anywhere in the current month means the worker
 // remains active for the entire current month.
 function getWorkerStatus(worker) {
-  const currentMonth = getUaeCalendarDates()
-    .todayString
-    .slice(0, 7);
-
-  return getWorkerStatusForMonth(worker, currentMonth);
+  return getWorkerStatusForMonth(worker, currentUaeMonthString());
 }
 
 function getWorkerStatusForMonth(worker, month) {
-  const [year, monthNumber] = month.split("-").map(Number);
+  const { start, end } = monthRange(month);
 
-  const selectedMonthStart =
-    `${year}-${String(monthNumber).padStart(2, "0")}-01`;
-
-  const nextMonthDate = new Date(
-    Date.UTC(year, monthNumber, 1),
-  );
-
-  const nextMonthStart = nextMonthDate
-    .toISOString()
-    .slice(0, 10);
+  const selectedMonthStart = dateOnly(start);
+  const nextMonthStart = dateOnly(end);
 
   const joiningDate = dateOnly(worker.joiningDate);
   const leavingDate = dateOnly(worker.leavingDate);
 
-  // The worker has not joined by the selected month.
   if (joiningDate && joiningDate >= nextMonthStart) {
     return "INACTIVE";
   }
 
-  // A worker remains active throughout their leaving month.
   if (leavingDate && leavingDate < selectedMonthStart) {
     return "INACTIVE";
   }
@@ -159,18 +109,6 @@ function withWorkerStatus(worker) {
   };
 }
 
-// Construct UTC-midnight dates from UAE calendar date strings.
-// These are used for Prisma's @db.Date comparisons.
-function getDateBoundaries() {
-  const { todayString, monthStartString } = getUaeCalendarDates();
-
-  return {
-    today: new Date(`${todayString}T00:00:00.000Z`),
-    monthStart: new Date(`${monthStartString}T00:00:00.000Z`),
-  };
-}
-
-
 export const listWorkers = asyncHandler(async (req, res) => {
   const {
     search,
@@ -182,7 +120,7 @@ export const listWorkers = asyncHandler(async (req, res) => {
   } = listWorkersQuerySchema.parse(req.query);
 
   const reportingMonth =
-    month || getUaeCalendarDates().todayString.slice(0, 7);
+    month || currentUaeMonthString();
 
   const where = {};
 

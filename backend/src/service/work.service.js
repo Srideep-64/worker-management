@@ -1,7 +1,15 @@
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { calculatePayroll, money } from "../utils/payroll.js";
-import { monthRange, currentMonthString } from "../utils/dates.js";
+import { 
+  monthRange,
+  monthStartDate,
+  currentMonthString,
+  dateOnly,
+  dateKeyToUtcDate,
+  getMonthStart,
+  getUaeDateParts,
+  getUaeCalendarDates,} from "../utils/dates.js";
 
 /* Shared helpers */
 const RECORD_INCLUDE = {
@@ -9,32 +17,6 @@ const RECORD_INCLUDE = {
   upload: { select: { id: true, originalFilename: true, status: true } },
 };
 
-function getUaeDateParts() {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Dubai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
-  );
-
-  return { year: values.year, month: values.month, day: values.day };
-}
-
-function dateOnly(value) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-}
-
-function getUaeCalendarDates() {
-  const { year, month, day } = getUaeDateParts();
-  return { today: `${year}-${month}-${day}`, monthStart: `${year}-${month}-01` };
-}
 
 function assertWorkDateNotInFuture(workDate) {
   const requestedWorkDate = dateOnly(workDate);
@@ -86,10 +68,6 @@ function validateWorkStatus({ status, hours }) {
   }
 }
 
-function getMonthStart(workDate) {
-  return new Date(Date.UTC(workDate.getUTCFullYear(), workDate.getUTCMonth(), 1));
-}
-
 async function assertNoActiveTimesheet(companyId, workDate, action) {
   const monthStart = getMonthStart(workDate);
   const activeTimesheet = await prisma.timesheetUpload.findFirst({
@@ -105,7 +83,7 @@ async function assertNoActiveTimesheet(companyId, workDate, action) {
 function serializeRecord(record) {
   return {
     id: record.id,
-    date: record.workDate.toISOString().slice(0, 10),
+    date: dateOnly(record.workDate),
     status: record.status,
     hours: record.hours == null ? null : Number(record.hours),
     source: record.source,
@@ -272,7 +250,7 @@ static async createManualWorkBatch(workerId, submittedRecords) {
     return {
       ...item,
       dateKey: key,
-      workDate: new Date(`${key}T00:00:00.000Z`),
+      workDate: dateKeyToUtcDate(key),
     };
   });
 
@@ -300,7 +278,7 @@ static async createManualWorkBatch(workerId, submittedRecords) {
     );
   }
 
-  const monthStart = new Date(`${month}-01T00:00:00.000Z`);
+  const monthStart = monthStartDate(month);
   const workDates = normalizedRecords.map((item) => item.workDate);
 
   const savedRecords = await prisma.$transaction(

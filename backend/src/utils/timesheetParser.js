@@ -1,40 +1,20 @@
 import * as XLSX from "xlsx";
-
-// A/H/W shorthand recognized in both formats (spec: "A = ABSENT, H = HOLIDAY,
-// W = WEEKLY_OFF"). Never guessed or normalized beyond this exact mapping —
-// anything else is a validation error, not a best-effort interpretation.
 const SHORTHAND_STATUS = { A: "ABSENT", H: "HOLIDAY", W: "WEEKLY_OFF" };
-const VALID_STATUS_WORDS = new Set(["WORKED", "ABSENT", "HOLIDAY", "WEEKLY_OFF"]);
+import {
+  daysInMonth,
+  dateOnly,
+  monthRange,
+  dateKeyToUtcDate,
+  isoDate
+} from "./dates.js";
 
-function daysInMonth(periodDate) {
-  return new Date(Date.UTC(periodDate.getUTCFullYear(), periodDate.getUTCMonth() + 1, 0)).getUTCDate();
-}
-
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
-}
-
-function dateOnly(value) {
-  if (!value) return null;
-
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toISOString().slice(0, 10);
-}
 
 function isWorkerActiveForMonth(worker, periodDate) {
-  const year = periodDate.getUTCFullYear();
-  const month = periodDate.getUTCMonth();
+  const month = dateOnly(periodDate).slice(0, 7);
+  const { start, end } = monthRange(month);
 
-  const monthStart = new Date(
-    Date.UTC(year, month, 1),
-  ).toISOString().slice(0, 10);
-
-  const nextMonthStart = new Date(
-    Date.UTC(year, month + 1, 1),
-  ).toISOString().slice(0, 10);
+  const monthStart = dateOnly(start);
+  const nextMonthStart = dateOnly(end);
 
   const joiningDate = dateOnly(worker.joiningDate);
   const leavingDate = dateOnly(worker.leavingDate);
@@ -128,7 +108,7 @@ function parseDayCellValue(raw) {
   const asNumber = Number(s);
 
   if (s !== "" && !Number.isNaN(asNumber)) {
-    if (asNumber < 0 || asNumber > 24) {
+    if (asNumber <= 0 || asNumber > 24) {
       return {
         kind: "error",
         message: `Hours ${asNumber} is out of the 0–24 range`,

@@ -5,6 +5,12 @@ import { saveFile, readFile } from "../lib/storage.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { parseAndValidateWorkbook } from "../utils/timesheetParser.js";
+import {
+  currentUaeMonthString,
+  monthStartDate,
+  monthRange,
+  periodMonthToDate,
+} from "../utils/dates.js";
 
 export const uploadBodySchema = z.object({
   companyId: z.string().uuid(),
@@ -13,6 +19,7 @@ export const uploadBodySchema = z.object({
 
 export const confirmBodySchema = z.object({
   replace: z.coerce.boolean().optional().default(false),
+  supersedeManual: z.coerce.boolean().optional().default(false),
 });
 
 export const listQuerySchema = z.object({
@@ -22,27 +29,9 @@ export const listQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(25),
 });
 
-function periodMonthToDate(str) {
-  const [y, m] = str.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, 1));
-}
-
-function getUaeCurrentMonth() {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Dubai",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
-  );
-
-  return `${values.year}-${values.month}`;
-}
 
 function assertPeriodMonthNotInFuture(periodMonth) {
-  const currentMonth = getUaeCurrentMonth();
+  const currentMonth = currentUaeMonthString();
 
   if (periodMonth > currentMonth) {
     throw ApiError.badRequest(
@@ -120,6 +109,61 @@ function buildPreview(records, context) {
   });
 }
 
+function workDateKey(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+// Only manual records whose worker AND date are present in the uploaded
+// timesheet count as conflicts. Other manual entries in the month are retained.
+async function findManualConflicts(records, companyId, periodMonth, db = prisma) {
+  if (!records.length) return [];
+
+  const workerIds = [...new Set(records.map((record) => record.workerId))];
+  const { start, end } = monthRange(periodMonth);
+
+  const manualRecords = await db.workRecord.findMany({
+    where: {
+      source: "MANUAL",
+      worker: { companyId },
+      workerId: { in: workerIds },
+      workDate: { gte: start, lt: end },
+    },
+    select: {
+      id: true,
+      workerId: true,
+      workDate: true,
+      hours: true,
+      status: true,
+      worker: { select: { workerCode: true, name: true } },
+    },
+  });
+
+  const uploadedByPair = new Map(
+    records.map((record) => [
+      `${record.workerId}:${workDateKey(record.workDate)}`,
+      record,
+    ]),
+  );
+
+  return manualRecords.flatMap((manual) => {
+    const key = `${manual.workerId}:${workDateKey(manual.workDate)}`;
+    const uploaded = uploadedByPair.get(key);
+    if (!uploaded) return [];
+
+    return [{
+      id: manual.id,
+      workerId: manual.workerId,
+      workerCode: manual.worker.workerCode,
+      workerName: manual.worker.name,
+      workDate: workDateKey(manual.workDate),
+      existingHours: manual.hours,
+      existingStatus: manual.status,
+      uploadedHours: uploaded.hours,
+      uploadedStatus: uploaded.status,
+    }];
+  });
+}
+
 function readWorkbookOrThrow(buffer) {
   try {
     return XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -175,6 +219,12 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
     where: { companyId, periodMonth: periodDate, status: "ACTIVE" },
   });
 
+  const manualConflicts = await findManualConflicts(
+    records,
+    companyId,
+    periodMonth,
+  );
+
   res.json({
     upload,
     valid: true,
@@ -184,6 +234,7 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
     conflict: existingActive
       ? { existingUploadId: existingActive.id, uploadedAt: existingActive.uploadedAt, rowCount: existingActive.rowCount }
       : null,
+    manualConflicts,
     preview: buildPreview(records, context),
   });
 });
@@ -193,7 +244,7 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
 // trusting anything cached from the upload step — company data (workers,
 // self-contained instead of needing a second place to store parsed rows.
 export const confirmTimesheet = asyncHandler(async (req, res) => {
-  const { replace } = req.body;
+  const { replace, supersedeManual } = req.body;
   const upload = await prisma.timesheetUpload.findUnique({ where: { id: req.params.id } });
   if (!upload) throw ApiError.notFound("Timesheet upload not found");
   if (upload.status !== "PROCESSING") {
@@ -249,33 +300,30 @@ const result = await prisma.$transaction(async (tx) => {
     });
   }
 
-  // 2. Remove MANUAL records for this company/month.
-  //
-  // The uploaded timesheet becomes the source of truth for the month,
-  // so existing manual records must not conflict with its worker/date
-  // records.
-  const monthStart = upload.periodMonth;
-
-  const monthEnd = new Date(
-    Date.UTC(
-      monthStart.getUTCFullYear(),
-      monthStart.getUTCMonth() + 1,
-      1
-    )
+  // 2. Recheck manual conflicts inside the transaction. If the preview is
+  // stale, require explicit authorization before deleting anything.
+  const currentManualConflicts = await findManualConflicts(
+    records,
+    upload.companyId,
+    periodMonth,
+    tx,
   );
 
-  await tx.workRecord.deleteMany({
-    where: {
-      worker: {
-        companyId: upload.companyId,
+  if (currentManualConflicts.length > 0 && !supersedeManual) {
+    throw ApiError.conflict(
+      "This timesheet overlaps with existing manual work records. Review the conflicts and confirm superseding them.",
+      { manualConflicts: currentManualConflicts },
+    );
+  }
+
+  if (currentManualConflicts.length > 0) {
+    await tx.workRecord.deleteMany({
+      where: {
+        id: { in: currentManualConflicts.map((record) => record.id) },
+        source: "MANUAL",
       },
-      workDate: {
-        gte: monthStart,
-        lt: monthEnd,
-      },
-      source: "MANUAL",
-    },
-  });
+    });
+  }
 
   // 3. Insert the new timesheet records.
   if (records.length > 0) {

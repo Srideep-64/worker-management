@@ -331,27 +331,34 @@ export default function WorkCalendar({ workerId, companyId, onMonthChange, onWor
   }
 
 function selectDate(date) {
-    const key = typeof date === "string" ? date : dateKey(date);
+  const key = typeof date === "string" ? date : dateKey(date);
 
-    const targetDraft = drafts[key];
-    const targetRecord = byDate[key];
+  const targetDraft = drafts[key];
+  const targetRecord = byDate[key];
 
-    const roleToKeep =
-      targetDraft?.roleId ||
-      targetRecord?.roleId ||
-      targetRecord?.role?.id ||
-      selectedRoleId;
+  const roleToKeep =
+    targetDraft?.roleId ||
+    targetRecord?.roleId ||
+    targetRecord?.role?.id ||
+    selectedRoleId;
 
-    setSelected(key);
-    setEntryValue("");
-    setSaveError("");
-    setSelectedRoleId(roleToKeep || "");
-    setEditRoleId(
-      targetRecord?.source === "MANUAL"
-        ? targetDraft?.roleId || targetRecord?.roleId || targetRecord?.role?.id || ""
-        : ""
-    );
-  }
+  setSelected(key);
+  setEntryValue("");
+  setSaveError(
+    targetRecord && targetRecord.source !== "MANUAL"
+      ? "Timesheet record is read-only. Download, update, and re-upload the timesheet to edit."
+      : ""
+  );
+  setSelectedRoleId(roleToKeep || "");
+  setEditRoleId(
+    targetRecord?.source === "MANUAL"
+      ? targetDraft?.roleId ||
+          targetRecord?.roleId ||
+          targetRecord?.role?.id ||
+          ""
+      : ""
+  );
+}
 
   function parseEntry() {
     const raw = entryValue.trim().toUpperCase();
