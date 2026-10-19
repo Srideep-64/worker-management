@@ -34,11 +34,19 @@ export default function CompanyDetail() {
   );
 
   const PAGE_SIZE = 15;
-  const [workerPage, setWorkerPage] = useState(location.state?.workerPage ?? 1);
+
   const [workersRefreshKey, setWorkersRefreshKey] = useState(0);
-  const [workerStatus, setWorkerStatus] = useState("ACTIVE");
+  const [workerPage, setWorkerPage] = useState(
+    () => location.state?.workerPage ?? 1
+  );
+
+  const [workerStatus, setWorkerStatus] = useState(
+    () => location.state?.workerStatus ?? "ACTIVE"
+  );
 
   const [month, setMonth] = useState(() => {
+    if (location.state?.month) return location.state.month;
+
     const now = new Date();
     const previousMonth = new Date(
       now.getFullYear(),
@@ -51,11 +59,7 @@ export default function CompanyDetail() {
     ).padStart(2, "0")}`;
   });
 
-  useEffect(() => {
-    setWorkerPage(1);
-  }, [companyId,workerStatus,month]);
 
-  
     const {
       data: companyData,
       error: companyError,

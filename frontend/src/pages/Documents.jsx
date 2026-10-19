@@ -17,6 +17,18 @@ import {
 // Cache each expiry window indefinitely until manually refreshed.
 const expiringDocumentsCache = new Map();
 
+const DOCUMENTS_STATE_KEY = "documents-page-state";
+
+function getSavedDocumentsState() {
+  try {
+    return JSON.parse(
+      sessionStorage.getItem(DOCUMENTS_STATE_KEY) || "null"
+    ) || {};
+  } catch {
+    return {};
+  }
+}
+
 const WINDOWS = [
   { value: "30", label: "Expired or within 30 days" },
   { value: "60", label: "Within 60 days" },
@@ -25,18 +37,40 @@ const WINDOWS = [
 ];
 
 export default function Documents() {
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
-  const [days, setDays] = useState("30");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [status, setStatus] = useState("ACTIVE");
-  const PAGE_SIZE = 25;
-  const [page, setPage] = useState(1);
+  const [initialState] = useState(getSavedDocumentsState);
+
+const [search, setSearch] = useState(
+  () => initialState.search ?? ""
+);
+const [type, setType] = useState(
+  () => initialState.type ?? ""
+);
+const [days, setDays] = useState(
+  () => initialState.days ?? "30"
+);
+const [status, setStatus] = useState(
+  () => initialState.status ?? "ACTIVE"
+);
+const [page, setPage] = useState(
+  () => Math.max(1, Number(initialState.page) || 1)
+);
+
+const [refreshing, setRefreshing] = useState(false);
+
+const PAGE_SIZE = 25;
 
   useEffect(() => {
-    setPage(1);
-  }, [search, type, status, days]);
+    sessionStorage.setItem(
+      DOCUMENTS_STATE_KEY,
+      JSON.stringify({
+        search,
+        type,
+        days,
+        status,
+        page,
+      })
+    );
+  }, [search, type, days, status, page]);
 
   const { data, error, loading, reload } = useFetch(async () => {
     // Reuse cached data for this expiry window.
@@ -51,7 +85,7 @@ export default function Documents() {
     return response;
   }, [days]);
 
-  useRestoreScrollPosition("/documents", !loading);
+  useRestoreScrollPosition("/documents", !loading );
 
   async function handleRefresh() {
     if (loading || refreshing) return;
@@ -94,14 +128,20 @@ export default function Documents() {
             placeholder="Search by worker ID or name"
             className="input pl-9"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
         <select
           className="input w-auto"
           value={type}
-          onChange={(e) => setType(e.target.value)}
+          onChange={(e) => {
+            setType(e.target.value);
+            setPage(1);
+          }}
         >
           <option value="">All document types</option>
           {["PASSPORT", "VISA", "EMIRATES_ID"].map((t) => (
@@ -114,7 +154,10 @@ export default function Documents() {
         <select
           className="input w-auto"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
         >
           <option value="ACTIVE">Active workers</option>
           <option value="INACTIVE">Inactive workers</option>
@@ -124,7 +167,10 @@ export default function Documents() {
         <select
           className="input w-auto"
           value={days}
-          onChange={(e) => setDays(e.target.value)}
+          onChange={(e) => {
+            setDays(e.target.value);
+            setPage(1);
+          }}
         >
           {WINDOWS.map((w) => (
             <option key={w.value} value={w.value}>

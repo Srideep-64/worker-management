@@ -89,8 +89,12 @@ export default function WorkersTab({
     const date = new Date(year, monthNumber - 1 + offset, 1);
 
     setMonth(
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+      `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}`
     );
+
+    setPage(1);
   }
 
   function handleRefresh() {
@@ -125,7 +129,10 @@ return (
           className="input w-auto"
           value={month}
           onChange={(event) => {
-            if (event.target.value) setMonth(event.target.value);
+            if (event.target.value) {
+              setMonth(event.target.value);
+              setPage(1);
+            }
           }}
         />
 

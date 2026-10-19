@@ -23,15 +23,36 @@ import {
   invalidateCachedWorkers,
 } from "../utils/listCache.js";
 
-
 const PAGE_SIZE = 25;
+
+const WORKERS_STATE_KEY = "workers-page-state";
+
+function getSavedWorkersState() {
+  try {
+    return JSON.parse(
+      sessionStorage.getItem(WORKERS_STATE_KEY) || "null"
+    ) || {};
+  } catch {
+    return {};
+  }
+}
 
 
 export default function Workers() {
-  const [search, setSearch] = useState("");
-  const [companyId, setCompanyId] = useState("");
-  const [status, setStatus] = useState("ACTIVE");
-  const [page, setPage] = useState(1);
+  const [initialState] = useState(getSavedWorkersState);
+
+  const [search, setSearch] = useState(
+    () => initialState.search ?? ""
+  );
+  const [companyId, setCompanyId] = useState(
+    () => initialState.companyId ?? ""
+  );
+  const [status, setStatus] = useState(
+    () => initialState.status ?? "ACTIVE"
+  );
+  const [page, setPage] = useState(
+    () => Math.max(1, Number(initialState.page) || 1)
+  );
   const [adding, setAdding] = useState(false);
 
   const debouncedSearch = useDebounced(search);
@@ -57,6 +78,18 @@ export default function Workers() {
       companies: companyData.companies ?? [],
     };
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      WORKERS_STATE_KEY,
+      JSON.stringify({
+        search,
+        companyId,
+        status,
+        page,
+      })
+    );
+  }, [search, companyId, status, page]);
 
   const workerCacheKey = JSON.stringify({
     search: debouncedSearch.trim(),
@@ -91,7 +124,7 @@ export default function Workers() {
     return response;
   }, [debouncedSearch, companyId, status, page]);
 
-  useRestoreScrollPosition("/workers", !loading);
+  useRestoreScrollPosition("/workers", !loading && !error);
 
 
   const workers = data?.workers ?? [];
@@ -126,7 +159,6 @@ export default function Workers() {
 
 
   const totalPages = Math.max(1, pagination?.totalPages ?? 1);
-  const totalWorkers = pagination?.total ?? workers.length;
 
   return (
     <> 

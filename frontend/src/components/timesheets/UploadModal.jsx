@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 
-import Modal from "../components/ui/Modal.jsx";
-import { api } from "../api/client.js";
-import { invalidateTimesheetCaches } from "../utils/timesheetCache.js";
+import Modal from "../ui/Modal.jsx";
+import { api } from "../../api/client.js";
+import { invalidateTimesheetCaches } from "../../utils/timesheetCache.js";
 
 function formatDate(value) {
   if (!value) return "—";

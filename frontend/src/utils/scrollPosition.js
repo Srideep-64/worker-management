@@ -19,6 +19,7 @@ export function saveScrollPosition(path) {
   );
 }
 
+
 export function useRestoreScrollPosition(path, ready = true) {
   const location = useLocation();
 
@@ -32,43 +33,34 @@ export function useRestoreScrollPosition(path, ready = true) {
     if (savedPosition === null) return;
 
     const targetPosition = Number(savedPosition);
-    let animationFrame;
-    let startTime;
+    let frame;
+    let attempts = 0;
 
-    const duration = 350;
-
-    function animateScroll(timestamp) {
+    function restore() {
       const container = getScrollContainer();
 
       if (!container) return;
 
-      if (startTime === undefined) {
-        startTime = timestamp;
+      const maxScroll =
+        container.scrollHeight - container.clientHeight;
+
+      // Wait briefly if the page content has not rendered yet.
+      if (maxScroll < targetPosition && attempts < 10) {
+        attempts += 1;
+        frame = requestAnimationFrame(restore);
+        return;
       }
 
-      const progress = Math.min(
-        (timestamp - startTime) / duration,
-        1
-      );
-
-      // Ease-out cubic: fast at first, then gently slows down.
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-      container.scrollTop =
-        container.scrollTop +
-        (targetPosition - container.scrollTop) * easedProgress;
-
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animateScroll);
-      } else {
-        container.scrollTop = targetPosition;
-      }
+      container.scrollTop = Math.min(targetPosition, maxScroll);
     }
 
-    animationFrame = requestAnimationFrame(animateScroll);
+    frame = requestAnimationFrame(restore);
 
-    return () => {
-      cancelAnimationFrame(animationFrame);
-    };
-  }, [path, location.key, location.state?.restoreScroll, ready]);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    path,
+    location.key,
+    location.state?.restoreScroll,
+    ready,
+  ]);
 }

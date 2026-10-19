@@ -131,21 +131,19 @@ export default function WorkerProfile() {
 
   return (
     <div className="space-y-4">
-      <Link
-        to={returnTo}
-        state={{
-          activeTab: location.state?.returnTab || "Workers",
-          Workerpage: location.state?.returnPage,
-          workerStatus: location.state?.returnWorkerStatus,
-          month: location.state?.returnMonth,
-          restoreScroll:
-            location.state?.restoreScrollOnReturn === true,
-        }}
-        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        {returnLabel}
-      </Link>
+    <Link
+      to={returnTo}
+      state={{
+        activeTab: location.state?.returnTab || "Workers",
+        workerPage: location.state?.returnWorkerPage ?? 1,
+        workerStatus: location.state?.returnWorkerStatus || "ACTIVE",
+        month: location.state?.returnMonth,
+      }}
+      className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
+    >
+      <ChevronLeft className="h-4 w-4" />
+      {returnLabel}
+    </Link>
 
       {/* Worker overview */}
       <Card>

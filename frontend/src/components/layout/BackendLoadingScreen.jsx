@@ -1,21 +1,27 @@
 
 import {
-  UsersRound,
   Building2,
   CalendarCheck,
   RefreshCw,
   LoaderCircle,
   ChartNoAxesColumn,
-
   LucideFileCheck,
+  UserShield,
+  ChartBarIncreasing,
+  ChartBarIncreasingIcon,
+  ChartLine,
+  TrendingUp,
+  TrendingUpIcon,
+  IndentIncrease,
+  ChartNoAxesColumnIncreasingIcon,
 } from "lucide-react";
 
 const items = [
-  { label: "Workers", Icon: UsersRound },
-  { label: "Companies", Icon: Building2 },
+  { label: "Workers", Icon: UserShield },
+  { label: "Companies", Icon: Building2},
   { label: "Work records", Icon: CalendarCheck },
   { label: "Documents", Icon: LucideFileCheck },
-  { label: "Timesheets", Icon: ChartNoAxesColumn},
+  { label: "Monthly Stats", Icon: ChartNoAxesColumn},
 ];
 
 export default function BackendLoadingScreen({

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,7 +11,7 @@ import Badge from "../ui/Badge.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
 import { api } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
-
+import TimesheetDetailsModal from "./TimesheetDetailsModal.jsx";
 import WorkCalendarGrid from "./WorkCalendarGrid.jsx";
 import ConfirmWorkUpload from "./ConfirmWorkUpload.jsx";
 import WorkMobileKeyboard from "./WorkMobileKeyboard.jsx";
@@ -80,6 +81,7 @@ export default function WorkCalendar({ workerId, companyId, onMonthChange, onWor
   const [showUploadConfirm, setShowUploadConfirm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [focusRoleAfterError, setFocusRoleAfterError] = useState(false);
+  const [selectedUploadId, setSelectedUploadId] = useState(null);
 
   const roleSelectRef = useRef(null);
   const preserveRoleRef = useRef(false);
@@ -755,6 +757,27 @@ async function confirmUpload() {
         onSubmitAndAdvance={handleSubmitAndAdvance}
       />
 
+  {selectedRecord &&
+    selectedRecord.source !== "MANUAL" &&
+    selectedRecord.upload?.id && (
+      <div className="rounded-lg border border-border p-4">
+        <p className="text-sm text-text-muted">
+          This attendance record was imported from a timesheet and
+          cannot be edited manually.
+        </p>
+
+        <button
+          type="button"
+          onClick={() =>
+            setSelectedUploadId(selectedRecord.upload.id)
+          }
+          className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-primary underline"
+        >
+          View original timesheet
+        </button>
+      </div>
+    )}
+
             {saveError && (
         <p role="alert" className="text-sm text-danger">
           {saveError}
@@ -793,6 +816,13 @@ async function confirmUpload() {
           onCancel={() => {
             if (!saving) setShowUploadConfirm(false);
           }}
+        />
+      )}
+
+      {selectedUploadId && (
+        <TimesheetDetailsModal
+          uploadId={selectedUploadId}
+          onClose={() => setSelectedUploadId(null)}
         />
       )}
 

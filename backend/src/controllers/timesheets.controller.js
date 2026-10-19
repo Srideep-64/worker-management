@@ -7,14 +7,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { parseAndValidateWorkbook } from "../utils/timesheetParser.js";
 import {
   currentUaeMonthString,
-  monthStartDate,
   monthRange,
   periodMonthToDate,
+  monthSchema,
 } from "../utils/dates.js";
 
 export const uploadBodySchema = z.object({
   companyId: z.string().uuid(),
-  periodMonth: z.string().regex(/^\d{4}-\d{2}$/, "periodMonth must be YYYY-MM"),
+  periodMonth: monthSchema,
 });
 
 export const confirmBodySchema = z.object({
@@ -25,6 +25,7 @@ export const confirmBodySchema = z.object({
 export const listQuerySchema = z.object({
   companyId: z.string().uuid().optional(),
   status: z.enum(["PROCESSING", "ACTIVE", "SUPERSEDED", "FAILED"]).optional(),
+  month:monthSchema.optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(25),
 });
@@ -178,7 +179,8 @@ function readWorkbookOrThrow(buffer) {
 // caller has seen the preview/errors and explicitly confirmed.
 export const uploadTimesheet = asyncHandler(async (req, res) => {
   if (!req.file) throw ApiError.badRequest("An .xlsx/.xls file is required (field name 'file')");
-  const { companyId, periodMonth } = req.body;
+  const { companyId, periodMonth } =
+  uploadBodySchema.parse(req.body);
 
   assertPeriodMonthNotInFuture(periodMonth);
 
@@ -244,7 +246,8 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
 // trusting anything cached from the upload step — company data (workers,
 // self-contained instead of needing a second place to store parsed rows.
 export const confirmTimesheet = asyncHandler(async (req, res) => {
-  const { replace, supersedeManual } = req.body;
+  const { replace, supersedeManual } = confirmBodySchema.parse(req.body);
+
   const upload = await prisma.timesheetUpload.findUnique({ where: { id: req.params.id } });
   if (!upload) throw ApiError.notFound("Timesheet upload not found");
   if (upload.status !== "PROCESSING") {
@@ -353,8 +356,22 @@ const result = await prisma.$transaction(async (tx) => {
 });
 
 export const listTimesheets = asyncHandler(async (req, res) => {
-  const { companyId, status, page, pageSize } = req.query;
-  const where = { companyId, status };
+  const { companyId, status, month, page, pageSize } =
+    listQuerySchema.parse(req.query);
+
+  const where = {
+    ...(companyId ? { companyId } : {}),
+    ...(status ? { status } : {}),
+  };
+
+  if (month) {
+    const { start, end } = monthRange(month);
+
+    where.periodMonth = {
+      gte: start,
+      lt: end,
+    };
+  }
 
   const [uploads, total] = await Promise.all([
     prisma.timesheetUpload.findMany({
@@ -363,14 +380,26 @@ export const listTimesheets = asyncHandler(async (req, res) => {
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
-        company: { select: { id: true, code: true, name: true } },
-        uploadedBy: { select: { id: true, name: true } },
+        company: {
+          select: { id: true, code: true, name: true },
+        },
+        uploadedBy: {
+          select: { id: true, name: true },
+        },
       },
     }),
     prisma.timesheetUpload.count({ where }),
   ]);
 
-  res.json({ uploads, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
+  res.json({
+    uploads,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    },
+  });
 });
 
 export const getTimesheet = asyncHandler(async (req, res) => {
