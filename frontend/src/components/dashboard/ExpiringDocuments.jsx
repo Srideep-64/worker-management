@@ -15,32 +15,43 @@ import {
 let expiringDocumentsCache = null;
 
 export default function ExpiringDocuments() {
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const { data, error, loading } = useFetch(
-    async () => {
-      if (refreshKey === 0 && expiringDocumentsCache !== null) {
-        return expiringDocumentsCache;
-      }
 
-      const response = await api.get("/documents/expiring?days=30");
+const { data, error, loading, reload } = useFetch(
+  async () => {
+    if (expiringDocumentsCache !== null) {
+      return expiringDocumentsCache;
+    }
 
-      expiringDocumentsCache = response;
+    const response = await api.get("/documents/expiring?days=30");
 
-      return response;
-    },
-    [refreshKey]
-  );
+    expiringDocumentsCache = response;
 
-  useRestoreScrollPosition("/", !loading);
+    return response;
+  },
+  []
+);
 
-  const documents = data?.items ?? [];
+useRestoreScrollPosition("/", !loading);
 
-  function handleRefresh() {
-    expiringDocumentsCache = null;
-    expiringDocumentsCacheTime = 0;
-    setRefreshKey((key) => key + 1);
+const documents = data?.items ?? [];
+
+async function handleRefresh() {
+  if (loading || refreshing) return;
+
+  setRefreshing(true);
+
+  // Invalidate the single dashboard cache.
+  expiringDocumentsCache = null;
+
+  try {
+    await reload();
+  } finally {
+    setRefreshing(false);
   }
+}
+
 
   return (
     <section className="rounded-xl border border-border bg-surface p-5">
@@ -59,10 +70,12 @@ export default function ExpiringDocuments() {
           type="button"
           className="btn-secondary"
           onClick={handleRefresh}
-          disabled={loading}
+          disabled={loading || refreshing}
         >
           <RefreshCw
-            className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            className={`h-4 w-4 ${
+              refreshing ? "animate-spin" : ""
+            }`}
           />
           Refresh
         </button>

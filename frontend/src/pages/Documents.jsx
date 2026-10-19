@@ -21,7 +21,7 @@ const WINDOWS = [
   { value: "30", label: "Expired or within 30 days" },
   { value: "60", label: "Within 60 days" },
   { value: "90", label: "Within 90 days" },
-  { value: "365", label: "Within 1 year" },
+  { value: "180", label: "Within 6 months" },
 ];
 
 export default function Documents() {
@@ -35,23 +35,21 @@ export default function Documents() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-      setPage(1);
-    }, [search, type, status, days]);
+    setPage(1);
+  }, [search, type, status, days]);
 
   const { data, error, loading, reload } = useFetch(async () => {
-    // Use cached data unless a manual refresh was requested.
-    if (refreshKey === 0 && expiringDocumentsCache.has(days)) {
+    // Reuse cached data for this expiry window.
+    if (expiringDocumentsCache.has(days)) {
       return expiringDocumentsCache.get(days);
     }
 
-    const response = await api.get(
-      `/documents/expiring?days=${days}`
-    );
+    const response = await api.get(`/documents/expiring?days=${days}`);
 
     expiringDocumentsCache.set(days, response);
 
     return response;
-  }, [days, refreshKey]);
+  }, [days]);
 
   useRestoreScrollPosition("/documents", !loading);
 
@@ -59,11 +57,12 @@ export default function Documents() {
     if (loading || refreshing) return;
 
     setRefreshing(true);
+
+    // Invalidate only the currently selected expiry window.
     expiringDocumentsCache.delete(days);
-    setRefreshKey((key) => key + 1);
 
     try {
-      // useFetch reruns when refreshKey changes.
+      // One request; don't also change a dependency to trigger another.
       await reload();
     } finally {
       setRefreshing(false);
@@ -78,15 +77,12 @@ export default function Documents() {
       (!q ||
         i.workerCode.toLowerCase().includes(q) ||
         i.name.toLowerCase().includes(q)) &&
-      (status === "ALL" || i.workerStatus === status)
+      (status === "ALL" || i.workerStatus === status),
   );
 
   const totalPages = Math.ceil(items.length / PAGE_SIZE);
 
-  const paginatedItems = items.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
-  );
+  const paginatedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <Card title="Document expiry">
@@ -114,7 +110,7 @@ export default function Documents() {
             </option>
           ))}
         </select>
-        
+
         <select
           className="input w-auto"
           value={status}
@@ -144,9 +140,7 @@ export default function Documents() {
           disabled={loading || refreshing}
         >
           <RefreshCw
-            className={`h-4 w-4 ${
-              refreshing ? "animate-spin" : ""
-            }`}
+            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
           />
           Refresh
         </button>
@@ -215,7 +209,8 @@ export default function Documents() {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-text-muted">
                 Showing {(page - 1) * PAGE_SIZE + 1}–
-                {Math.min(page * PAGE_SIZE, items.length)} of {items.length} documents
+                {Math.min(page * PAGE_SIZE, items.length)} of {items.length}{" "}
+                documents
               </p>
 
               <div className="flex items-center gap-2">

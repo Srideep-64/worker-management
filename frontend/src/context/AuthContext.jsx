@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
 } from "react";
 
 import { api, ApiError } from "../api/client.js";
@@ -31,6 +32,8 @@ function wait(ms) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState("loading");
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const loadingTimerRef = useRef(null);
   // loading | authenticated | anonymous | unavailable
 
   const [connectionError, setConnectionError] = useState("");
@@ -83,6 +86,30 @@ export function AuthProvider({ children }) {
     loadSession();
   }, [loadSession]);
 
+  useEffect(() => {
+  if (status !== "loading") {
+    setShowLoadingScreen(false);
+
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+
+    return;
+  }
+
+  loadingTimerRef.current = setTimeout(() => {
+    setShowLoadingScreen(true);
+  }, 100);
+
+  return () => {
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+  };
+}, [status]);
+
   const login = useCallback(async (email, password) => {
     const data = await api.post("/auth/login", { email, password });
 
@@ -105,7 +132,7 @@ export function AuthProvider({ children }) {
 
   // The same full-screen experience works on login and protected pages.
   if (status === "loading") {
-    return <BackendLoadingScreen />;
+    return showLoadingScreen ? <BackendLoadingScreen /> : null;
   }
 
   if (status === "unavailable") {
