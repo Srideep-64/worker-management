@@ -100,7 +100,7 @@ export function AuthProvider({ children }) {
 
   loadingTimerRef.current = setTimeout(() => {
     setShowLoadingScreen(true);
-  }, 100);
+  }, 600);
 
   return () => {
     if (loadingTimerRef.current) {

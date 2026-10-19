@@ -3,18 +3,19 @@ import {
   UsersRound,
   Building2,
   CalendarCheck,
-  FileText,
-  ClipboardList,
   RefreshCw,
   LoaderCircle,
+  ChartNoAxesColumn,
+
+  LucideFileCheck,
 } from "lucide-react";
 
 const items = [
   { label: "Workers", Icon: UsersRound },
   { label: "Companies", Icon: Building2 },
   { label: "Work records", Icon: CalendarCheck },
-  { label: "Documents", Icon: FileText },
-  { label: "Timesheets", Icon: ClipboardList },
+  { label: "Documents", Icon: LucideFileCheck },
+  { label: "Timesheets", Icon: ChartNoAxesColumn},
 ];
 
 export default function BackendLoadingScreen({
@@ -111,7 +112,7 @@ export default function BackendLoadingScreen({
             <div className="flex items-center justify-center gap-2">
               <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
               <h2 className="text-base font-semibold">
-                Waking up Workforce…
+                Setting up Workforce…
               </h2>
             </div>
 
