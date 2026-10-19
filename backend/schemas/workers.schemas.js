@@ -1,41 +1,69 @@
 import { z } from "zod";
 
-const dateStr = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
-  .transform((s) => new Date(`${s}T00:00:00.000Z`));
+const dateString = z.coerce.date();
+const nullableDateString = dateString.nullable().optional();
 
 export const listWorkersQuerySchema = z.object({
-  q: z.string().trim().max(200).optional(),
+  search: z.string().trim().optional().default(""),
   companyId: z.string().uuid().optional(),
-  roleId: z.string().uuid().optional(),
-  status: z.enum(["ACTIVE", "INACTIVE", "ALL"]).default("ACTIVE"),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(30).default(15),
-});
+
+  status: z
+    .enum(["ACTIVE", "INACTIVE", "ALL"])
+    .optional()
+    .default("ALL"),
+
+  month: z.string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional(),
+
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(30).optional(),
+  pageSize: z.coerce.number().int().min(1).max(30).optional(),
+}).transform((query) => ({
+  ...query,
+  limit: query.pageSize ?? query.limit ?? 20,
+}));
 
 export const createWorkerSchema = z.object({
-  workerCode: z.string().trim().min(1).max(20),
+  workerCode: z
+    .string()
+    .trim()
+    .regex(
+      /^[A-Z]{2,4}\d{3,6}$/,
+      "Worker code must contain 2–4 uppercase letters followed by 3–6 digits",
+    ),
+
   companyId: z.string().uuid(),
   name: z.string().trim().min(1).max(200),
+
   passportNumber: z.string().trim().max(50).optional(),
-  passportExpiry: dateStr.optional(),
+  passportExpiry: dateString.optional(),
   nationality: z.string().trim().max(100).optional(),
-  dateOfBirth: dateStr.optional(),
+  dateOfBirth: dateString.optional(),
   phone: z.string().trim().max(30).optional(),
+
   visaNumber: z.string().trim().max(50).optional(),
-  visaExpiry: dateStr.optional(),
+  visaExpiry: dateString.optional(),
+
   emiratesIdNumber: z.string().trim().max(50).optional(),
-  emiratesIdExpiry: dateStr.optional(),
+  emiratesIdExpiry: dateString.optional(),
+
   labourCardNumber: z.string().trim().max(50).optional(),
   jobTitle: z.string().trim().max(100).optional(),
-  joiningDate: dateStr.optional(),
+
+  joiningDate: dateString,
+  leavingDate: nullableDateString,
 });
 
-export const updateWorkerSchema = createWorkerSchema.partial().omit({ workerCode: true });
-// worker_code is the business identifier used to match Excel rows — allowing
-// it to be edited after the fact would silently break historical timesheet
-// links, so it's immutable once a worker is created.
+export const updateWorkerSchema = createWorkerSchema
+  .omit({
+    companyId: true,
+    workerCode: true,
+  })
+  .partial()
+  .extend({
+    leavingDate: nullableDateString,
+  });
 
 export const workQuerySchema = z.object({
   month: z

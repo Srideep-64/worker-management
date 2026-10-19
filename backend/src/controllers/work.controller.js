@@ -8,19 +8,6 @@ export const monthQuerySchema = z.object({
   month: monthSchema.optional(),
 });
 
-export const createManualWorkSchema = z.object({
-  roleId: z.string().uuid(),
-  workDate: z.coerce.date(),
-  status: z.enum(["WORKED", "ABSENT", "HOLIDAY", "WEEKLY_OFF"]),
-  hours: z.coerce.number().gt(0).max(24).optional(),
-});
-
-export const updateManualWorkSchema = z.object({
-  status: z.enum(["WORKED", "ABSENT", "HOLIDAY", "WEEKLY_OFF"]),
-  roleId: z.string().uuid().optional(),
-  hours: z.coerce.number().gt(0).max(24).optional(),
-});
-
 export const createManualWorkBatchSchema = z.object({
   records: z.array(
     z.object({
@@ -38,16 +25,6 @@ export const createManualWorkBatchSchema = z.object({
 export const getWorkerWork = asyncHandler(async (req, res) => {
   const result = await WorkService.getWorkerWork(req.params.id, req.query.month);
   res.json(result);
-});
-
-export const createManualWork = asyncHandler(async (req, res) => {
-  const record = await WorkService.createManualWork(req.params.id, req.body);
-  res.status(201).json({ record });
-});
-
-export const updateManualWork = asyncHandler(async (req, res) => {
-  const record = await WorkService.updateManualWork(req.params.id, req.params.recordId, req.body);
-  res.json({ record });
 });
 
 export const createManualWorkBatch = asyncHandler(async (req, res) => {

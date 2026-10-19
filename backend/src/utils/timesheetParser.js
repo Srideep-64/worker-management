@@ -3,28 +3,9 @@ const SHORTHAND_STATUS = { A: "ABSENT", H: "HOLIDAY", W: "WEEKLY_OFF" };
 import {
   daysInMonth,
   dateOnly,
-  monthRange,
-  dateKeyToUtcDate,
   isoDate
 } from "./dates.js";
-
-
-function isWorkerActiveForMonth(worker, periodDate) {
-  const month = dateOnly(periodDate).slice(0, 7);
-  const { start, end } = monthRange(month);
-
-  const monthStart = dateOnly(start);
-  const nextMonthStart = dateOnly(end);
-
-  const joiningDate = dateOnly(worker.joiningDate);
-  const leavingDate = dateOnly(worker.leavingDate);
-
-  return (
-    joiningDate !== null &&
-    joiningDate < nextMonthStart &&
-    (!leavingDate || leavingDate >= monthStart)
-  );
-}
+import { getWorkerStatusForMonth } from "./workerStatus.js";
 
 // Array-of-arrays mode, rather than the object mode sheet_to_json normally
 // offers, so header matching can be done case-insensitively (WORKER_ID vs
@@ -261,15 +242,15 @@ if (missingDays.length > 0) {
       return;
     }
 
-    if (!isWorkerActiveForMonth(worker, periodDate)) {
-      errors.push({
-        sheet: "Sheet1",
-        row: rowNum,
-        field: "WORKER_ID",
-        message: `Worker "${workerCode}" is not active for the selected reporting month`,
-      });
-      return;
-    }
+    if (getWorkerStatusForMonth(worker, dateOnly(periodDate)) !== "ACTIVE") {
+  errors.push({
+    sheet: "Sheet1",
+    row: rowNum,
+    field: "WORKER_ID",
+    message: `Worker "${workerCode}" is not active for the selected reporting month`,
+  });
+  return;
+}
 
     if (!baseRoleCode) {
       errors.push({ sheet: "Sheet1", row: rowNum, field: "ROLE", message: "Missing role" });
@@ -301,21 +282,36 @@ if (missingDays.length > 0) {
       }
 
       const workDate = new Date(Date.UTC(year, month, day));
+
+      const requestedWorkDate = isoDate(workDate);
+
+      const joiningDate = worker.joiningDate
+        ? isoDate(new Date(worker.joiningDate))
+        : null;
+
       const leavingDate = worker.leavingDate
-          ? isoDate(new Date(worker.leavingDate))
-          : null;
+        ? isoDate(new Date(worker.leavingDate))
+        : null;
 
-        const requestedWorkDate = isoDate(workDate);
+      if (joiningDate && requestedWorkDate < joiningDate) {
+        errors.push({
+          sheet: "Sheet1",
+          row: rowNum,
+          field: `Day ${day}`,
+          message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's joining date is ${joiningDate}.`,
+        });
+        continue;
+      }
 
-        if (leavingDate && requestedWorkDate > leavingDate) {
-          errors.push({
-            sheet: "Sheet1",
-            row: rowNum,
-            field: `Day ${day}`,
-            message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
-          });
-          continue;
-        }
+      if (leavingDate && requestedWorkDate > leavingDate) {
+        errors.push({
+          sheet: "Sheet1",
+          row: rowNum,
+          field: `Day ${day}`,
+          message: `Cannot add a work record for ${worker.name} dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
+        });
+        continue;
+      }
       const overrideRole = overrides.get(`${workerCode}|${isoDate(workDate)}`);
       const roleCode = overrideRole || baseRoleCode;
 

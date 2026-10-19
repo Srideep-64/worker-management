@@ -5,7 +5,6 @@ import {
   listCompanies,
   getCompany,
   createCompany,
-  createCompanySchema,
 } from "../controllers/companies.controller.js";
 
 import {
@@ -14,6 +13,7 @@ import {
   exportCompanyMonthlyExcel,
   exportCompanyMonthlyPdf,
 } from "../controllers/companyReports.controller.js";
+import { createCompanySchema } from "../../schemas/companies.schemas.js";
 
 const router = Router();
 

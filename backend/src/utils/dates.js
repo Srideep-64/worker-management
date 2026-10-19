@@ -14,6 +14,19 @@ export function monthRange(month) {
   };
 }
 
+export function formatReportMonth(month) {
+  const [year, monthNumber] = month.split("-");
+
+  const monthName = new Date(
+    Date.UTC(Number(year), Number(monthNumber) - 1, 1)
+  ).toLocaleString("en-US", {
+    month: "short",
+    timeZone: "Asia/Dubai",
+  });
+
+  return `${monthName}-${year}`;
+}
+
 export function monthStartDate(month) {
   return monthRange(month).start;
 }

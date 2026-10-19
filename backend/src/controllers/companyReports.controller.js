@@ -4,21 +4,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { monthRange, currentMonthString } from "../utils/dates.js";
+import { monthRange, currentMonthString, formatReportMonth } from "../utils/dates.js";
 import { getCompanyMonthlyReport } from "../utils/companyMonthlyReport.js";
-
-function formatReportMonth(month) {
-  const [year, monthNumber] = month.split("-");
-
-  const monthName = new Date(
-    Date.UTC(Number(year), Number(monthNumber) - 1, 1)
-  ).toLocaleString("en-US", {
-    month: "short",
-    timeZone: "Asia/Dubai",
-  });
-
-  return `${monthName}-${year}`;
-}
 
 export const companyReportQuerySchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),

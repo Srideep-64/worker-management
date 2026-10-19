@@ -2,17 +2,12 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { createCompanySchema } from "../../schemas/companies.schemas.js";
 import {
   currentUaeMonthString,
   monthRange,
   dateOnly,
 } from "../utils/dates.js";
-
-export const createCompanySchema = z.object({
-  code: z.string().trim().min(1).max(10),
-  name: z.string().trim().min(1).max(200),
-});
-
 
 export const listCompanies = asyncHandler(async (req, res) => {
   // Use the current month in the UAE timezone.
@@ -76,6 +71,18 @@ export const getCompany = asyncHandler(async (req, res) => {
 });
 
 export const createCompany = asyncHandler(async (req, res) => {
-  const company = await prisma.company.create({ data: req.body });
+  const parsed = createCompanySchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    throw ApiError.badRequest(
+      "Invalid company data",
+      parsed.error.flatten()
+    );
+  }
+
+  const company = await prisma.company.create({
+    data: parsed.data,
+  });
+
   res.status(201).json({ company });
 });

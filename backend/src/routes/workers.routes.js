@@ -1,23 +1,15 @@
-
 import { Router } from "express";
-
 import {
   listWorkers,
-  listWorkersQuerySchema,
   getWorker,
   createWorker,
-  createWorkerSchema,
   updateWorker,
-  updateWorkerSchema,
 } from "../controllers/workers.controller.js";
+import { createWorkerSchema, updateWorkerSchema, listWorkersQuerySchema } from "../../schemas/workers.schemas.js";
 
 import {
   getWorkerWork,
   monthQuerySchema,
-  createManualWork,
-  createManualWorkSchema,
-  updateManualWork,
-  updateManualWorkSchema,
   createManualWorkBatch,
   createManualWorkBatchSchema,
 } from "../controllers/work.controller.js";
@@ -66,17 +58,6 @@ router.get(
   getWorkerWork,
 );
 
-router.post(
-  "/workers/:id/work",
-  validate({ body: createManualWorkSchema }),
-  createManualWork,
-);
-
-router.patch(
-  "/workers/:id/work/:recordId",
-  validate({ body: updateManualWorkSchema }),
-  updateManualWork,
-);
 
 // Payroll
 router.get(

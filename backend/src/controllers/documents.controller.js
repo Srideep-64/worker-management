@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { saveFile, readFile, deleteFile } from "../lib/storage.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getWorkerStatus } from "../utils/workerStatus.js";
 
 export const DOCUMENT_TYPES = ["PHOTO", "PASSPORT", "VISA", "EMIRATES_ID", "LABOUR_CARD"];
 
@@ -147,25 +148,12 @@ export const listExpiring = asyncHandler(async (req, res) => {
   });
 
   // Use UTC date strings to compare calendar dates consistently.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateOnly(new Date());
   const todayUtc = Date.parse(`${today}T00:00:00Z`);
-  const cutoffDate = new Date(cutoff).toISOString().slice(0, 10);
 
+  const cutoffDate = dateOnly(cutoff);
   function dateOnly(value) {
     return value ? new Date(value).toISOString().slice(0, 10) : null;
-  }
-
-  function getWorkerStatus(worker) {
-    const joiningDate = dateOnly(worker.joiningDate);
-    const leavingDate = dateOnly(worker.leavingDate);
-
-    const active =
-      joiningDate !== null &&
-      joiningDate <= today &&
-      (!leavingDate ||
-        leavingDate >= today.slice(0, 7) + "-01");
-
-    return active ? "ACTIVE" : "INACTIVE";
   }
 
   const items = [];

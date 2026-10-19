@@ -8,118 +8,17 @@ import {
   dateOnly,
   dateKeyToUtcDate,
   getMonthStart,
-  getUaeDateParts,
   getUaeCalendarDates,} from "../utils/dates.js";
+import {
+  RECORD_INCLUDE,
+  assertWorkDateNotInFuture,
+  assertWorkDateWithinEmployment,
+  validateWorkStatus,
+  assertNoActiveTimesheet,
+  serializeRecord,
+  summarize,
+} from "../utils/workRecord.js";
 
-/* Shared helpers */
-const RECORD_INCLUDE = {
-  role: { select: { id: true, code: true, name: true } },
-  upload: { select: { id: true, originalFilename: true, status: true } },
-};
-
-
-function assertWorkDateNotInFuture(workDate) {
-  const requestedWorkDate = dateOnly(workDate);
-  const { today } = getUaeCalendarDates();
-
-  if (!requestedWorkDate) throw ApiError.badRequest("Invalid work date.");
-  if (requestedWorkDate > today) {
-    throw ApiError.badRequest(
-      `Cannot add or edit attendance for a future date (${requestedWorkDate}). Today is ${today} in UAE time.`,
-    );
-  }
-}
-
-function isWorkerActive(worker) {
-  const { today, monthStart } = getUaeCalendarDates();
-  const joiningDate = dateOnly(worker.joiningDate);
-  const leavingDate = dateOnly(worker.leavingDate);
-
-  const hasJoined = joiningDate !== null && joiningDate <= today;
-  const hasNotLeft = !leavingDate || leavingDate >= monthStart;
-
-  return hasJoined && hasNotLeft;
-}
-
-function assertWorkDateWithinEmployment(worker, workDate) {
-  const joiningDate = dateOnly(worker.joiningDate);
-  const leavingDate = dateOnly(worker.leavingDate);
-  const requestedWorkDate = dateOnly(workDate);
-
-  if (!requestedWorkDate) throw ApiError.badRequest("Invalid work date.");
-  if (joiningDate && requestedWorkDate < joiningDate) {
-    throw ApiError.badRequest(
-      `Cannot add or edit a work record dated ${requestedWorkDate}. The worker's joining date is ${joiningDate}.`,
-    );
-  }
-  if (leavingDate && requestedWorkDate > leavingDate) {
-    throw ApiError.badRequest(
-      `Cannot add or edit a work record dated ${requestedWorkDate}. The worker's leaving date is ${leavingDate}.`,
-    );
-  }
-}
-
-function validateWorkStatus({ status, hours }) {
-  if (status === "WORKED" && hours == null) {
-    throw ApiError.badRequest("Hours are required when status is WORKED");
-  }
-  if (status !== "WORKED" && hours != null) {
-    throw ApiError.badRequest("Hours must be omitted for non-WORKED statuses");
-  }
-}
-
-async function assertNoActiveTimesheet(companyId, workDate, action) {
-  const monthStart = getMonthStart(workDate);
-  const activeTimesheet = await prisma.timesheetUpload.findFirst({
-    where: { companyId, periodMonth: monthStart, status: "ACTIVE" },
-    select: { id: true, originalFilename: true },
-  });
-
-  if (activeTimesheet) {
-    throw ApiError.conflict(`This month is managed by an active timesheet. Manual records cannot be ${action}.`);
-  }
-}
-
-function serializeRecord(record) {
-  return {
-    id: record.id,
-    date: dateOnly(record.workDate),
-    status: record.status,
-    hours: record.hours == null ? null : Number(record.hours),
-    source: record.source,
-    role: record.role,
-    upload: record.upload,
-  };
-}
-
-function summarize(records) {
-  const summary = {
-    totalHours: 0, workedDays: 0, absentDays: 0,
-    holidays: 0, weeklyOffs: 0, byRole: {},
-  };
-
-  for (const record of records) {
-    if (record.status === "WORKED") {
-      const hours = record.hours ?? 0;
-      summary.workedDays += 1;
-      summary.totalHours += hours;
-      const role = `${record.role.code} — ${record.role.name}`;
-      summary.byRole[role] = (summary.byRole[role] || 0) + hours;
-    } else if (record.status === "ABSENT") {
-      summary.absentDays += 1;
-    } else if (record.status === "HOLIDAY") {
-      summary.holidays += 1;
-    } else if (record.status === "WEEKLY_OFF") {
-      summary.weeklyOffs += 1;
-    }
-  }
-
-  const list = (items) => Object.entries(items)
-    .map(([name, hours]) => ({ name, hours }))
-    .sort((a, b) => b.hours - a.hours);
-
-  return { ...summary, byRole: list(summary.byRole) };
-}
 
 /* Service Class */
 export class WorkService {
@@ -141,96 +40,6 @@ export class WorkService {
     const records = rows.map(serializeRecord);
     return { month, records, summary: summarize(records) };
   }
-
-  static async createManualWork(workerId, data) {
-    const { roleId, workDate, status, hours } = data;
-
-    const worker = await prisma.worker.findUnique({
-      where: { id: workerId },
-      select: { id: true, companyId: true, joiningDate: true, leavingDate: true },
-    });
-
-    if (!worker) throw ApiError.notFound("Worker not found");
-
-    assertWorkDateWithinEmployment(worker, workDate);
-    assertWorkDateNotInFuture(workDate);
-    validateWorkStatus({ status, hours });
-
-    await assertNoActiveTimesheet(worker.companyId, workDate, "added");
-
-    const role = await prisma.role.findUnique({
-      where: { id: roleId }, select: { id: true },
-    });
-
-    if (!role) throw ApiError.badRequest("roleId does not reference an existing role");
-
-    const existing = await prisma.workRecord.findUnique({
-      where: { workerId_workDate: { workerId, workDate } },
-      select: { id: true },
-    });
-
-    if (existing) throw ApiError.conflict("A work record already exists for this worker on this date");
-
-    const record = await prisma.workRecord.create({
-      data: {
-        workerId, roleId, workDate, status,
-        hours: status === "WORKED" ? hours : null,
-        source: "MANUAL", uploadId: null,
-      },
-      include: RECORD_INCLUDE,
-    });
-
-    return serializeRecord(record);
-  }
-
-  static async updateManualWork(workerId, recordId, data) {
-    const { status, roleId, hours } = data;
-
-    const existing = await prisma.workRecord.findFirst({
-      where: { id: recordId, workerId },
-      include: RECORD_INCLUDE,
-    });
-
-    if (!existing) throw ApiError.notFound("Work record not found");
-
-    if (existing.source !== "MANUAL" || existing.uploadId) {
-      throw ApiError.badRequest("Timesheet records cannot be edited. Update the source timesheet instead.");
-    }
-
-    const worker = await prisma.worker.findUnique({
-      where: { id: workerId },
-      select: { id: true, companyId: true, joiningDate: true, leavingDate: true },
-    });
-
-    if (!worker) throw ApiError.notFound("Worker not found");
-
-    assertWorkDateWithinEmployment(worker, existing.workDate);
-    assertWorkDateNotInFuture(existing.workDate);
-    validateWorkStatus({ status, hours });
-
-    await assertNoActiveTimesheet(worker.companyId, existing.workDate, "edited");
-
-    const nextRoleId = status === "WORKED" ? roleId ?? existing.roleId : existing.roleId;
-
-    if (status === "WORKED" && !nextRoleId) {
-      throw ApiError.badRequest("Select a role when status is WORKED");
-    }
-
-    const role = await prisma.role.findUnique({
-      where: { id: nextRoleId }, select: { id: true },
-    });
-
-    if (!role) throw ApiError.badRequest("The selected role does not exist");
-
-    const updated = await prisma.workRecord.update({
-      where: { id: existing.id },
-      data: { status, roleId: nextRoleId, hours: status === "WORKED" ? hours : null },
-      include: RECORD_INCLUDE,
-    });
-
-    return serializeRecord(updated);
-  }
-
 
 static async createManualWorkBatch(workerId, submittedRecords) {
   if (!submittedRecords.length) {
@@ -297,21 +106,13 @@ static async createManualWorkBatch(workerId, submittedRecords) {
       if (!worker) {
         throw ApiError.notFound("Worker not found.");
       }
-
-      const activeTimesheet = await tx.timesheetUpload.findFirst({
-        where: {
-          companyId: worker.companyId,
-          periodMonth: monthStart,
-          status: "ACTIVE",
-        },
-        select: { id: true },
-      });
-
-      if (activeTimesheet) {
-        throw ApiError.conflict(
-          "This month is managed by an active timesheet. Manual records cannot be uploaded."
-        );
-      }
+      
+      await assertNoActiveTimesheet(
+        worker.companyId,
+        monthStart,
+        "uploaded",
+        tx,
+      );
 
       // 3. Fetch existing records without loading unnecessary relations.
       const existingRecords = await tx.workRecord.findMany({
