@@ -6,22 +6,13 @@ import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import AddWorkerModal from "../components/worker/AddWorkerModal.jsx";
 
-import { api, qs } from "../api/client.js";
+import { api, qs, invalidate } from "../api/client.js";
 import { useFetch, useDebounced } from "../hooks.js";
 
 import {
   saveScrollPosition,
   useRestoreScrollPosition,
 } from "../utils/scrollPosition.js";
-
-import {
-  getCachedCompanies,
-  setCachedCompanies,
-  invalidateCachedCompanies,
-  getCachedWorkers,
-  setCachedWorkers,
-  invalidateCachedWorkers,
-} from "../utils/listCache.js";
 
 const PAGE_SIZE = 25;
 
@@ -62,22 +53,7 @@ export default function Workers() {
     error: lookupError,
     loading: lookupsLoading,
     reload: reloadLookups,
-  } = useFetch(async () => {
-    const cached = getCachedCompanies();
-
-    if (cached) {
-      return {
-        companies: cached.companies ?? [],
-      };
-    }
-
-    const companyData = await api.get("/companies");
-    setCachedCompanies(companyData);
-
-    return {
-      companies: companyData.companies ?? [],
-    };
-  }, []);
+  } = useFetch(() => api.get("/companies"), []);
 
   useEffect(() => {
     sessionStorage.setItem(
@@ -91,38 +67,24 @@ export default function Workers() {
     );
   }, [search, companyId, status, page]);
 
-  const workerCacheKey = JSON.stringify({
-    search: debouncedSearch.trim(),
-    companyId,
-    status,
-    page,
-    pageSize: PAGE_SIZE,
-  });
-
   const {
     data,
     error,
     loading,
     reload,
-  } = useFetch(async () => {
-    const cached = getCachedWorkers(workerCacheKey);
-
-    if (cached) return cached;
-
-    const response = await api.get(
-      `/workers${qs({
-        search: debouncedSearch.trim() || undefined,
-        companyId: companyId || undefined,
-        status,
-        page,
-        pageSize: PAGE_SIZE,
-      })}`,
-    );
-
-    setCachedWorkers(workerCacheKey, response);
-
-    return response;
-  }, [debouncedSearch, companyId, status, page]);
+  } = useFetch(
+    () =>
+      api.get(
+        `/workers${qs({
+          search: debouncedSearch.trim() || undefined,
+          companyId: companyId || undefined,
+          status,
+          page,
+          pageSize: PAGE_SIZE,
+        })}`,
+      ),
+    [debouncedSearch, companyId, status, page],
+  );
 
   useRestoreScrollPosition("/workers", !loading && !error);
 
@@ -148,10 +110,8 @@ export default function Workers() {
   function handleWorkerSaved() {
     setAdding(false);
     setPage(1);
-
-    // A new worker affects the worker list and company worker counts.
-    invalidateCachedWorkers();
-    invalidateCachedCompanies();
+  // A new worker affects the worker list and company worker counts.
+    invalidate("/workers", "/companies", "/dashboard");
 
     reload();
     reloadLookups();
@@ -178,7 +138,7 @@ export default function Workers() {
             type="button"
             className="btn-secondary"
             onClick={() => {
-              invalidateCachedWorkers();
+              invalidate("/workers");
               reload();
             }}
             disabled={loading}

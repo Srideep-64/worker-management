@@ -12,13 +12,8 @@ import Badge from "../components/ui/Badge.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import UploadModal from "../components/timesheets/UploadModal.jsx";
 
-import { api, qs } from "../api/client.js";
+import { api, qs,invalidate } from "../api/client.js";
 import { useFetch, fmtMonth } from "../hooks.js";
-import {
-  getCachedCompanies,
-  getCachedTimesheets,
-  invalidateTimesheetCaches,
-} from "../utils/timesheetCache.js";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -38,37 +33,24 @@ export default function Timesheets() {
   const [month, setMonth] = useState("");
 
   const refreshData = () => {
-    invalidateTimesheetCaches();
-    setRefreshKey((key) => key + 1);
-  };
+  invalidate("/timesheets");
+  setRefreshKey((key) => key + 1);
+};
 
-  const companiesQuery = useFetch(
-    () =>
-      getCachedCompanies(async () => {
-        const response = await api.get("/companies");
-        return response.companies || [];
-      }),
-    [refreshKey]
-  );
+// An upload rewrites attendance, so everything built from it is stale.
+const handleUploaded = () => {
+  invalidate("/timesheets", "/companies", "/workers", "/dashboard");
+  setRefreshKey((key) => key + 1);
+};
+
+const companiesQuery = useFetch(() => api.get("/companies"), [refreshKey]);
 
 const { data, error, loading } = useFetch(
-  () => {
-    const query = qs({
-      companyId,
-      status,
-      month,
-      pageSize: 20,
-    });
-
-    return getCachedTimesheets(
-      `/timesheets${query}`,
-      () => api.get(`/timesheets${query}`)
-    );
-  },
-  [companyId, status, month, refreshKey]
+  () => api.get(`/timesheets${qs({ companyId, status, month, pageSize: 20 })}`),
+  [companyId, status, month, refreshKey],
 );
 
-  const companies = companiesQuery.data || [];
+const companies = companiesQuery.data?.companies || [];
   const uploads = data?.uploads || [];
 
   return (
@@ -105,13 +87,13 @@ const { data, error, loading } = useFetch(
       {companiesQuery.error && (
         <p role="alert" className="mb-4 text-sm text-danger">
           Failed to load companies:{" "}
-          {companiesQuery.error.message || "Unknown error"}
+          {companiesQuery.error || "Unknown error"}
         </p>
       )}
 
       {error && (
         <p role="alert" className="mb-4 text-sm text-danger">
-          {error.message || "Failed to load timesheets."}
+          {error || "Failed to load timesheets."}
         </p>
       )}
 
@@ -229,7 +211,7 @@ const { data, error, loading } = useFetch(
           onClose={() => setShowUpload(false)}
           onDone={() => {
             setShowUpload(false);
-            refreshData();
+            handleUploaded();
           }}
         />
       )}

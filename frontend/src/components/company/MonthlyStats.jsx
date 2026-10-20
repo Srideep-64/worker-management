@@ -5,20 +5,12 @@ import {
   FileText,
   RefreshCw,
   ChevronLeft,
-  ChevronRight,
-  Download,
-  
+  ChevronRight, 
 } from "lucide-react";
 
 import EmptyState from "../ui/EmptyState.jsx";
-import { api } from "../../api/client.js";
+import { api,invalidate } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
-import {
-  getMonthlyStats,
-  setMonthlyStats,
-  invalidateMonthlyStats,
-} from "../../utils/companyCache.js";
-
 
 async function downloadCompanyReport(companyId, month, format, companyCode) {
   
@@ -80,7 +72,6 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
 
   const [downloading, setDownloading] = useState("");
   const [downloadError, setDownloadError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
 
   async function handleDownload(format) {
     setDownloading(format);
@@ -97,26 +88,9 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
     }
   }
 
-
-  const [forceRefresh, setForceRefresh] = useState(false);
-
-  const statsCacheKey = `${companyId}:${month}`;
-
   const { data, error, loading, reload } = useFetch(
-    async () => {
-      if (!forceRefresh) {
-        const cached = getMonthlyStats(statsCacheKey);
-        if (cached) return cached;
-      }
-
-      const response = await api.get(
-        `/companies/${companyId}/stats?month=${month}`
-      );
-
-      setMonthlyStats(statsCacheKey, response);
-      return response;
-    },
-    [companyId, month, forceRefresh]
+    () => api.get(`/companies/${companyId}/stats?month=${month}`),
+    [companyId, month],
   );
 
   const summary = data?.summary;
@@ -221,8 +195,8 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
       type="button"
       className="btn-secondary px-2 min-w-0 gap-1"
       onClick={async () => {
-        invalidateMonthlyStats(companyId, month);
-        setForceRefresh(true);
+        invalidate(`/companies/${companyId}/stats`);
+        reload();
       }}
       disabled={loading}
     >
@@ -260,7 +234,7 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
 
       {error && (
         <p role="alert" className="text-sm text-danger">
-          {error.message || "Unable to load monthly statistics."}
+          {error || "Unable to load monthly statistics."}
         </p>
       )}
 
@@ -324,7 +298,7 @@ function MonthlyStats({ companyId,companyCode,month,setMonth}) {
                   <p
                     className={`mt-1 text-lg font-semibold tabular-nums ${
                       label === "Remaining pay" &&
-                      Number(value ?? 0) <= "0.00"
+                      Number(value ?? 0) <= 0
                         ? "text-green-600"
                         : "text-text"
                     }`}

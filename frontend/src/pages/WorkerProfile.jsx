@@ -3,23 +3,16 @@ import { Link, useParams, useLocation } from "react-router-dom";
 import { ChevronLeft, FileText, User, CalendarClock, ChevronDown, ChevronUp} from "lucide-react";
 
 import Card from "../components/ui/Card.jsx";
-import WorkCalendar from "../components/work-calender/WorkCalender.jsx";
-import WorkSummary from "../components/work-calender/WorkSummary.jsx";
-import PayrollSummary from "../components/work-calender/PayrollSummary.jsx";
+import WorkCalendar from "../components/work-calendar/WorkCalendar.jsx";
+import WorkSummary from "../components/work-calendar/WorkSummary.jsx";
+import PayrollSummary from "../components/work-calendar/PayrollSummary.jsx";
 import DocumentsPanel from "../components/worker/DocumentsPanel.jsx";
 import EditWorkerModal from "../components/worker/EditWorkerModal.jsx";
 import ChangeWorkerStatusModal from "../components/worker/ChangeWorkerStatusModal.jsx";
 
-import { api } from "../api/client.js";
+import { api,invalidate } from "../api/client.js";
 import { useFetch, fmtDate } from "../hooks.js";
 
-import {
-  getCachedWorkerProfile,
-  setCachedWorkerProfile,
-  invalidateWorkerProfile,
-} from "../utils/profileCache.js";
-
-import { invalidateCompanyWorkers } from "../utils/companyDetailCache.js";
 import WorkerPdfDownload from "../components/worker/WorkerPdfDownload.jsx";
 
 function Field({ label, value }) {
@@ -33,7 +26,6 @@ function Field({ label, value }) {
   );
 }
 
-
 export default function WorkerProfile() {
   const { workerId } = useParams();
 
@@ -42,19 +34,8 @@ export default function WorkerProfile() {
     error,
     loading,
     reload,
-  } = useFetch(async () => {
-    const cached = getCachedWorkerProfile(workerId);
-
-    if (cached !== null) {
-      return cached;
-    }
-
-    const response = await api.get(`/workers/${workerId}`);
-
-    setCachedWorkerProfile(workerId, response);
-
-    return response;
-  }, [workerId]);
+  } = useFetch(() => api.get(`/workers/${workerId}`),
+   [workerId]);
 
   const worker = workerData?.worker ?? workerData;
 
@@ -277,13 +258,11 @@ export default function WorkerProfile() {
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);
-            invalidateWorkerProfile(workerId)
-            invalidateCompanyWorkers(worker.companyId);
+            invalidate("/workers", "/companies", "/dashboard","documents");
             reload();
           }}
         />
       )}
-
       
         {changingStatus && (
           <ChangeWorkerStatusModal
@@ -291,8 +270,7 @@ export default function WorkerProfile() {
             onClose={() => setChangingStatus(false)}
             onSaved={() => {
               setChangingStatus(false);
-              invalidateWorkerProfile(workerId);
-              invalidateCompanyWorkers(worker.companyId);
+              invalidate("/workers", "/companies", "/dashboard","/documents");
               reload();
             }}
           />

@@ -6,6 +6,7 @@ import workersRoutes from "./workers.routes.js";
 import rolesRoutes from "./roles.routes.js";
 import timesheetsRoutes from "./timesheets.routes.js";
 import documentsRoutes from "./documents.routes.js";
+import dashboardRoutes from "./dashboard.routes.js"
 const router = Router();
 
 // authRoutes contains the one public endpoint (POST /auth/login) plus
@@ -14,10 +15,12 @@ const router = Router();
 // "All application routes/API endpoints must require authentication except
 // login."
 router.use(authRoutes);
-router.use(requireAuth, companiesRoutes);
-router.use(requireAuth, workersRoutes);
-router.use(requireAuth, rolesRoutes);
-router.use(requireAuth, timesheetsRoutes);
-router.use(requireAuth, documentsRoutes);
+router.use(requireAuth);
+router.use(dashboardRoutes);
+router.use(companiesRoutes);
+router.use(workersRoutes);
+router.use(rolesRoutes);
+router.use(timesheetsRoutes);
+router.use(documentsRoutes);
 
 export default router;

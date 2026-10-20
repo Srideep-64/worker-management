@@ -121,8 +121,7 @@ export const streamDocument = asyncHandler(async (req, res) => {
 
 // Expiry tracking includes active and inactive workers.
 // Worker status is derived from joining and leaving dates.
-export const listExpiring = asyncHandler(async (req, res) => {
-  const { days, companyId } = req.query;
+export async function findExpiring({days, companyId, activeOnly=false}){
   const cutoff = new Date(Date.now() + days * 86400000);
 
   const workers = await prisma.worker.findMany({
@@ -159,6 +158,7 @@ export const listExpiring = asyncHandler(async (req, res) => {
   const items = [];
 
   for (const worker of workers) {
+    if (activeOnly && getWorkerStatus(worker) !== "ACTIVE") continue;
     for (const [type, expiry] of [
       ["PASSPORT", worker.passportExpiry],
       ["VISA", worker.visaExpiry],
@@ -188,5 +188,10 @@ export const listExpiring = asyncHandler(async (req, res) => {
 
   items.sort((a, b) => a.daysLeft - b.daysLeft);
 
-  res.json({ items });
+  return items;
+};
+
+export const listExpiring = asyncHandler(async (req, res) => {
+  const { days, companyId } = req.query;
+  res.json({ items: await findExpiring({ days, companyId }) });
 });

@@ -3,8 +3,7 @@ import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 
 import Modal from "../ui/Modal.jsx";
-import { api } from "../../api/client.js";
-import { invalidateTimesheetCaches } from "../../utils/timesheetCache.js";
+import { api,invalidate } from "../../api/client.js";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -92,7 +91,7 @@ export default function UploadModal({ companies, onClose, onDone }) {
     try {
       const response = await api.post("/timesheets/upload", formData);
 
-      invalidateTimesheetCaches();
+      invalidate("/timesheets", "/companies", "/workers", "/dashboard");
 
       setResult(response);
       setStep("preview");

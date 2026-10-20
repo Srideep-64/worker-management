@@ -1,12 +1,5 @@
-
-import { useState } from "react";
 import { api } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
-
-import {
-  getCachedWork,
-  setCachedWork,
-} from "../../utils/workCache.js";
 
 // Keep your existing Stat and Breakdown components here.
 function Stat({ label, value, valueClassName = "text-text" }) {
@@ -48,18 +41,10 @@ function Breakdown({ title, rows = [] }) {
 }
 export default function WorkSummary({ workerId,month,refreshKey, }) {
 
-  const { data, error, loading } = useFetch(async () => {
-    const cached = getCachedWork(workerId, month);
-
-    if (cached) return cached;
-
-    const response = await api.get(
-      `/workers/${workerId}/work?month=${month}`
-    );
-
-    setCachedWork(workerId, month, response);
-    return response;
-  }, [workerId, month, refreshKey]);
+  const { data, error, loading } = useFetch(
+    () => api.get(`/workers/${workerId}/work?month=${month}`),
+    [workerId, month, refreshKey],
+  );
 
   const summary = data?.summary;
 
@@ -77,7 +62,7 @@ export default function WorkSummary({ workerId,month,refreshKey, }) {
       <section className="rounded-lg border border-border p-4">
         <h3 className="text-sm font-semibold text-text">Work Summary</h3>
         <p className="mt-3 text-sm text-danger">
-          {error.message || "Failed to load work summary."}
+          {error || "Failed to load work summary."}
         </p>
       </section>
     );

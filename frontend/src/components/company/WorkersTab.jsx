@@ -4,16 +4,6 @@ import { Link } from "react-router-dom";
 import { Users, RefreshCw,ChevronLeft,ChevronRight } from "lucide-react";
 
 import EmptyState from "../ui/EmptyState.jsx";
-import { api } from "../../api/client.js";
-import { useFetch } from "../../hooks.js";
-import { getCachedWork, setCachedWork } from "../../utils/workCache.js";
-import {
-  getWorkerSummary,
-  setWorkerSummary,
-  invalidateWorkerSummaries,
-} from "../../utils/companyCache.js";
-import { invalidateCompanyWorkers } from "../../utils/companyDetailCache.js";
-
 export default function WorkersTab({
   workers,
   companyId,
@@ -25,11 +15,10 @@ export default function WorkersTab({
   setPage,
   hasNextPage,
   workersLoading,
-  setWorkersRefreshKey,
+  onRefresh,
   PAGE_SIZE
 }) {
   const loading = workersLoading;
-  const error = null;
 
   const hoursByWorker = new Map(
   workers.map((worker) => [
@@ -51,14 +40,7 @@ export default function WorkersTab({
       `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}`
-    );
-
-    
-  }
-
-  function handleRefresh() {
-    invalidateCompanyWorkers(companyId);
-    setWorkersRefreshKey((key) => key + 1);
+    ); 
   }
 
 return (
@@ -108,7 +90,7 @@ return (
       <button
         type="button"
         className="btn-secondary"
-        onClick={handleRefresh}
+        onClick={onRefresh}
         disabled={loading}
       >
         <RefreshCw className="h-4 w-4" />
@@ -130,12 +112,6 @@ return (
       </select>
     </div>
   </div>
-
-  {error && (
-    <p role="alert" className="text-sm text-danger">
-      {error.message || "Unable to load worker statistics."}
-    </p>
-  )}
 
       <div className="overflow-x-auto">
         {workers.length === 0 ? (

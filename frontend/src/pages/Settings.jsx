@@ -1,59 +1,18 @@
-import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
-
 import Card from "../components/ui/Card.jsx";
 import Badge from "../components/ui/Badge.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
-import { fetchUsers,getCachedUsers } from "../utils/usersCache.js";
-
+import { api, invalidate } from "../api/client.js";
+import { useFetch } from "../hooks.js";
 export default function Settings() {
   const { user } = useAuth();
 
-  const [users, setUsers] = useState(() => getCachedUsers() ?? []);
-  const [loading, setLoading] = useState(
-    () => getCachedUsers() === null
-  );
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (getCachedUsers() !== null) {
-      setUsers(getCachedUsers());
-      setLoading(false);
-      return;
-    }
-
-    fetchUsers()
-      .then((result) => {
-        if (!cancelled) setUsers(result);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.message || "Failed to load users.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, error, loading, reload } = useFetch(() => api.get("/users"), []);
+  const users = data?.users ?? [];
 
   async function handleRefresh() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await fetchUsers({ refresh: true });
-      setUsers(result);
-    } catch (err) {
-      setError(err.message || "Failed to refresh users.");
-    } finally {
-      setLoading(false);
-    }
+    invalidate("/users");
+    await reload();
   }
 
   return (

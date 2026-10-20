@@ -2,12 +2,6 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, FileSpreadsheet, FileText,LoaderCircle } from "lucide-react";
 
-import { api } from "../../api/client.js";
-import { useFetch } from "../../hooks.js";
-import {
-  getMonthlyStats,
-  setMonthlyStats,
-} from "../../utils/companyCache.js";
 
 function formatMonth(month) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -77,33 +71,14 @@ async function downloadCompanyReport(companyId, month, format, companyCode) {
 
 export default function CompanyMonthlyCard({ company, month }) {
   const [downloading, setDownloading] = useState(false);
-  const statsCacheKey = `${company.id}:${month}`;
-
-  const { data, error, loading } = useFetch(
-    async () => {
-      const cached = getMonthlyStats(statsCacheKey);
-      if (cached) return cached;
-
-      const response = await api.get(
-        `/companies/${company.id}/stats?month=${month}`
-      );
-
-      setMonthlyStats(statsCacheKey, response);
-      return response;
-    },
-    [company.id, month]
-  );
-
   const workerCount = company.activeWorkerCount ?? "—";
-
-  const totalHours = data?.summary?.totalHours ?? 0;
-  const payroll = data?.payrollSummary;
+  const { totalHours = 0, grossPay, remainingPay } = company;
 
   async function handleDownload(event, format) {
     event.preventDefault();
     event.stopPropagation();
 
-    if (loading || downloading) return;
+    if (downloading) return;
 
     setDownloading(true);
 
@@ -152,14 +127,14 @@ export default function CompanyMonthlyCard({ company, month }) {
         <div>
           <p className="text-sm text-text-muted">Total hours</p>
           <p className="font-semibold tabular-nums text-text">
-            {loading ? "..." : totalHours.toLocaleString()}
+            { totalHours.toLocaleString()}
           </p>
         </div>
 
         <div>
           <p className="text-sm text-text-muted">Gross pay</p>
           <p className="font-semibold tabular-nums text-text">
-            {loading ? "..." : formatAED(payroll?.grossPay)}
+            {  formatAED(grossPay)}
           </p>
         </div>
 
@@ -167,26 +142,20 @@ export default function CompanyMonthlyCard({ company, month }) {
           <p className="text-sm text-text-muted">Remaining pay</p>
           <p
             className={`font-semibold tabular-nums ${
-              Number(payroll?.remainingPay ?? 0) <= 0
+              Number(remainingPay ?? 0) <= 0
                 ? "text-green-600"
                 : "text-text"
             }`}
           >
-            {loading ? "..." : formatAED(payroll?.remainingPay)}
+            {  formatAED(remainingPay)}
           </p>
         </div>
       </div>
 
-      {error && (
-        <p className="mt-2 text-xs text-red-600">
-          Failed to load monthly statistics.
-        </p>
-      )}
-
       <div className="mt-4 flex gap-2 border-t border-border pt-3">
         <button
           type="button"
-          disabled={loading || downloading}
+          disabled={downloading}
           onClick={(event) => handleDownload(event, "excel")}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
         >
@@ -201,7 +170,7 @@ export default function CompanyMonthlyCard({ company, month }) {
 
         <button
           type="button"
-          disabled={loading || downloading}
+          disabled={downloading}
           onClick={(event) => handleDownload(event, "pdf")}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-accent hover:bg-accent-soft/30"
         >

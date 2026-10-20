@@ -23,15 +23,16 @@ export function useFetch(fn, deps) {
     try {
       const data = await fn();
 
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current) return null;
 
       setState({
         data,
         error: null,
         loading: false,
       });
+      return data;
     } catch (err) {
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current) return null;
 
       setState({
         data: null,
@@ -39,7 +40,7 @@ export function useFetch(fn, deps) {
         loading: false,
       });
 
-      throw err;
+      return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

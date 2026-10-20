@@ -16,19 +16,8 @@ import AddWorkerModal from "../components/worker/AddWorkerModal.jsx";
 import StatCard from "../components/ui/StatCard.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 
-import { api } from "../api/client.js";
+import { api,invalidate } from "../api/client.js";
 import { useFetch } from "../hooks.js";
-
-import {
-  getCachedCompanies,
-  setCachedCompanies,
-  invalidateCachedCompanies,
-  invalidateCachedWorkers,
-} from "../utils/listCache.js";
-
-import {
-  invalidateMonthlyStats,
-} from "../utils/companyCache.js";
 
 function formatMonth(month) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -50,48 +39,6 @@ function getPreviousMonth() {
 }
 
 // Dashboard cache
-let dashboardStatsCache = null;
-
-function invalidateDashboardCache() {
-  dashboardStatsCache = null;
-}
-
-
-async function fetchDashboardData() {
-  if (dashboardStatsCache) {
-    return dashboardStatsCache;
-  }
-
-  const cached = getCachedCompanies();
-
-  const companiesData = cached ?? await api.get("/companies");
-
-  if (!cached) {
-    setCachedCompanies(companiesData);
-  }
-
-  const companies = companiesData.companies || [];
-
-  const result = {
-    companies,
-    companiesCount:
-      companiesData.pagination?.total ??
-      companiesData.pagination?.totalCount ??
-      companies.length,
-
-    workersCount: companies.reduce(
-      (total, company) =>
-        total + Number(company.activeWorkerCount ?? 0),
-      0
-    ),
-
-    failedSections: [],
-  };
-
-  dashboardStatsCache = result;
-  return result;
-}
-
 
 // Main Dashboard
 export default function Dashboard() {
@@ -102,24 +49,17 @@ export default function Dashboard() {
   const month = getPreviousMonth();
 
   const { data, error, loading, reload } = useFetch(
-    fetchDashboardData,
-    []
+    () => api.get(`/dashboard?month=${month}`),
+    [month],
   );
 
   const companies = data?.companies || [];
-  const failedSections = data?.failedSections || [];
 
   async function handleRefresh() {
     if (refreshing) return;
 
     setRefreshing(true);
-    invalidateDashboardCache();
-    invalidateCachedCompanies();
-
-    companies.forEach((company) => {
-      invalidateMonthlyStats(company.id, month);
-    });
-
+    invalidate("/dashboard");
     try {
       await reload();
     } finally {
@@ -129,19 +69,13 @@ export default function Dashboard() {
 
   async function handleCreated() {
     setAdding(false);
-    invalidateDashboardCache();
-    invalidateCachedCompanies();
-
+    invalidate("/dashboard", "/companies");
     await reload();
   }
 
   async function handleWorkerCreated() {
   setAddingWorker(false);
-
-  invalidateDashboardCache();
-  invalidateCachedCompanies();
-  invalidateCachedWorkers();
-
+  invalidate("/dashboard", "/workers", "/companies");
   await reload();
 }
 
@@ -174,18 +108,10 @@ return (
         role="alert"
         className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
       >
-        {error.message || "Failed to load dashboard data."}
+        {error || "Failed to load dashboard data."}
       </div>
     )}
 
-    {failedSections.length > 0 && (
-      <div
-        role="status"
-        className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
-      >
-        Could not load: {failedSections.join(", ")}. Try refreshing.
-      </div>
-    )}
 
     {/* Overall totals */}
     <div className="grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
@@ -260,8 +186,8 @@ return (
             {companies.map((company) => (
               <CompanyMonthlyCard
                 key={company.id}
-                company={company}
-                month={month}
+                company={company} 
+                month={month}               
               />
             ))}
           </div>
@@ -269,7 +195,7 @@ return (
       </section>
 
       <div className="mt-6">
-        <ExpiringDocuments />
+        <ExpiringDocuments items={data?.expiring ?? []} loading={loading}  />
       </div>
 
       {addingWorker && (

@@ -1,57 +1,14 @@
-
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
-
-import { api } from "../../api/client.js";
-import { useFetch, DOC_LABELS } from "../../hooks.js";
+import { DOC_LABELS } from "../../hooks.js";
 
 import {
   saveScrollPosition,
   useRestoreScrollPosition,
 } from "../../utils/scrollPosition.js";
 
-// Cache expiring documents indefinitely until manually refreshed.
-let expiringDocumentsCache = null;
-
-export default function ExpiringDocuments() {
-  const [refreshing, setRefreshing] = useState(false);
-
-
-const { data, error, loading, reload } = useFetch(
-  async () => {
-    if (expiringDocumentsCache !== null) {
-      return expiringDocumentsCache;
-    }
-
-    const response = await api.get("/documents/expiring?days=30");
-
-    expiringDocumentsCache = response;
-
-    return response;
-  },
-  []
-);
+export default function ExpiringDocuments({items:documents, loading}) {
 
 useRestoreScrollPosition("/", !loading);
-
-const documents = data?.items ?? [];
-
-async function handleRefresh() {
-  if (loading || refreshing) return;
-
-  setRefreshing(true);
-
-  // Invalidate the single dashboard cache.
-  expiringDocumentsCache = null;
-
-  try {
-    await reload();
-  } finally {
-    setRefreshing(false);
-  }
-}
-
 
   return (
     <section className="rounded-xl border border-border bg-surface p-5">
@@ -66,21 +23,7 @@ async function handleRefresh() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={handleRefresh}
-          disabled={loading || refreshing}
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${
-              refreshing ? "animate-spin" : ""
-            }`}
-          />
-          Refresh
-        </button>
-
-          <Link
+        <Link
             to="/documents"
             className="text-sm font-medium text-accent hover:underline"
           >
@@ -89,24 +32,7 @@ async function handleRefresh() {
         </div>
       </div>
 
-      {loading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          Loading documents...
-        </p>
-      ) : error ? (
-        <div className="py-6 text-center">
-          <p className="text-sm text-red-600">
-            Failed to load expiring documents.
-          </p>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="mt-2 text-sm font-medium text-accent hover:underline"
-          >
-            Try again
-          </button>
-        </div>
-      ) : documents.length === 0 ? (
+      { documents.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           Nothing expiring soon.
         </p>

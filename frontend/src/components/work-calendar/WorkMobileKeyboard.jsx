@@ -65,7 +65,7 @@ export default function WorkMobileKeyboard({
               onClick={() => pressKey(key)}
               className={`flex min-h-12 items-center justify-center rounded-lg border font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 isEnter
-                  ? "col-span-2 border-[#007AFF] bg-[#007AFF] text-white hover:opacity-90 dark:border-[#0A84FF] dark:bg-[#0A84FF]"
+                  ? "col-span-2 border-accent bg-accent text-white hover:opacity-90"
                   : isStatus
                     ? `${statusColors[key]} hover:brightness-95`
                     : isDelete

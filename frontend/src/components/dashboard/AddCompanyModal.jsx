@@ -3,7 +3,6 @@ import { useState } from "react";
 
 import Modal from "../ui/Modal.jsx";
 import { api, ApiError } from "../../api/client.js";
-import { invalidateCachedCompanies } from "../../utils/listCache.js";
 
 export default function AddCompanyModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
@@ -35,7 +34,6 @@ export default function AddCompanyModal({ onClose, onCreated }) {
         name: form.name.trim(),
       });
 
-      invalidateCachedCompanies();
       await onCreated();
     } catch (err) {
       setError(

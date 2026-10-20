@@ -46,8 +46,50 @@ export function qs(params = {}) {
   return query ? `?${query}` : "";
 }
 
-// Centralized fetch handler
+// ── Response cache ─────────────────────────────────────────────
+const cache = new Map(); // path -> { data, expires }
+let version = 0;         // bumped on every invalidate
 
+// First matching rule wins; anything unmatched uses DEFAULT_TTL.
+const TTL_RULES = [
+  [/^\/(me|auth)/, 0],                             // never cache the session
+  [/^\/roles/, Infinity],                          // session-long
+  [/\/(work|payroll|stats|dashboard)(\/|\?|$)/, 60_000],     // 1 min
+];
+const DEFAULT_TTL = 120_000;                       // 2 min
+const ttlFor = (path) =>
+  TTL_RULES.find(([re]) => re.test(path))?.[1] ?? DEFAULT_TTL;
+
+async function cachedGet(path, { force = false } = {}) {
+  const hit = cache.get(path);
+  if (!force && hit && hit.expires > Date.now()) return hit.data;
+
+  const startVersion = version;
+  const data = await request(path);
+
+  // Skip the write if an invalidate ran while this request was in flight.
+  if (startVersion === version) {
+    cache.set(path, { data, expires: Date.now() + ttlFor(path) });
+  }
+  return data;
+}
+
+export function invalidate(...parts) {
+  version++;
+  // Also drop matching in-flight GETs, otherwise a fetch started right
+  // after invalidate would join the old (stale) request.
+  for (const map of [cache, inFlightGets])
+    for (const key of map.keys())
+      if (parts.some((p) => key.includes(p))) map.delete(key);
+}
+
+export function clearCache() {   // call on logout
+  version++;
+  cache.clear();
+  inFlightGets.clear();
+}
+
+// Centralized fetch handler
 async function request(
   path,
   { method = "GET", body, headers, ...rest } = {}
@@ -127,7 +169,7 @@ async function request(
 
 // API methods
 export const api = {
-  get: (path) => request(path),
+  get: cachedGet,
 
   post: (path, body) =>
     request(path, {

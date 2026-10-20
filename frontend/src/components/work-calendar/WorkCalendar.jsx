@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,29 +8,12 @@ import {
 
 import Badge from "../ui/Badge.jsx";
 import EmptyState from "../ui/EmptyState.jsx";
-import { api } from "../../api/client.js";
+import { api, invalidate } from "../../api/client.js";
 import { useFetch } from "../../hooks.js";
 import TimesheetDetailsModal from "./TimesheetDetailsModal.jsx";
 import WorkCalendarGrid from "./WorkCalendarGrid.jsx";
 import ConfirmWorkUpload from "./ConfirmWorkUpload.jsx";
 import WorkMobileKeyboard from "./WorkMobileKeyboard.jsx";
-
-import {
-  getCachedWork,
-  setCachedWork,
-  invalidateCachedWork,
-} from "../../utils/workCache.js";
-
-import {
-  getCachedRoles,
-  setCachedRoles,
-  invalidateCachedPayroll,
-} from "../../utils/profileCache.js";
-
-import {
-  invalidateWorkerSummaries,
-  invalidateMonthlyStats,
-} from "../../utils/companyCache.js";
 
 import {
   STATUS_FROM_KEY,
@@ -41,9 +23,6 @@ import {
   buildChanges,
   pad,
 } from "./workCalendarUtils.js";
-
-import { updateCachedWorkerSummary } from "../../utils/companyDetailCache.js";
-
 
   function getRecordEntryValue(record) {
     if (!record || record.source !== "MANUAL") return "";
@@ -102,44 +81,15 @@ export default function WorkCalendar({ workerId, companyId,initialMonth, onMonth
     onMonthChange?.(month);
   }, [month, onMonthChange]);
 
-  function invalidateRelatedCaches(workDate) {
-  const workMonth = workDate.slice(0, 7);
+    function invalidateRelatedCaches() {
+    invalidate(workerId, companyId, "/dashboard");
+ }
 
-  invalidateCachedWork(workerId, workMonth);
-  invalidateCachedPayroll(workerId,workMonth);
-  invalidateMonthlyStats(companyId, workMonth);
-  invalidateWorkerSummaries(companyId, workMonth, workerId);
-}
-
-  const { data, error, loading, reload } = useFetch(
-    async () => {
-      const cached = getCachedWork(workerId, month);
-
-      if (cached) return cached;
-
-      const response = await api.get(
-        `/workers/${workerId}/work?month=${month}`
-      );
-
-      setCachedWork(workerId, month, response);
-      return response;
-    },
+   const { data, error, loading, reload } = useFetch(
+    () => api.get(`/workers/${workerId}/work?month=${month}`),
     [workerId, month],
   );
-
-  const {
-    data: rolesData,
-    error: rolesError,
-  } = useFetch(async () => {
-    const cached = getCachedRoles();
-
-    if (cached) return cached;
-
-    const response = await api.get("/roles");
-    setCachedRoles(response);
-
-    return response;
-  }, []);
+ const { data: rolesData, error: rolesError } = useFetch(() => api.get("/roles"), []);
 
   const roles = rolesData?.roles ?? [];
   const records = data?.records ?? [];
@@ -590,24 +540,14 @@ async function confirmUpload() {
       records: recordsToUpload,
     });
 
-    invalidateRelatedCaches(`${month}-01`);
+    invalidateRelatedCaches();
 
     setDrafts({});
     setShowUploadConfirm(false);
     setEntryValue("");
     setSaveError("");
 
-    const workResponse = await reload();
-
-    if (workResponse?.summary) {
-      updateCachedWorkerSummary(
-        companyId,
-        workerId,
-        month,
-        workResponse.summary,
-      );
-    }
-
+    await reload();
     onWorkUpdated?.();
   } catch (err) {
     setSaveError(
@@ -632,7 +572,7 @@ async function confirmUpload() {
 
       setRefreshing(true);
 
-      invalidateRelatedCaches(`${month}-01`);
+      invalidateRelatedCaches();
 
       try {
         await reload();
@@ -649,7 +589,7 @@ async function confirmUpload() {
   {/* Upload records */}
   <button
     type="button"
-    className="inline-flex items-center gap-2 rounded-md border border-[#007AFF] bg-[#007AFF] px-3 py-2 text-white hover:opacity-90 dark:border-[#0A84FF] dark:bg-[#0A84FF]"
+    className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-2 text-white hover:opacity-90"
     onClick={() => {
       if (pendingCount > 0) {
         setShowUploadConfirm(true);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useParams,useLocation } from "react-router-dom";
 import {
   ChevronLeft,
@@ -8,22 +8,10 @@ import WorkersTab from "../components/company/WorkersTab.jsx";
 import MonthlyStats from "../components/company/MonthlyStats.jsx";
 
 import Card from "../components/ui/Card.jsx";
-import { api } from "../api/client.js";
+import { api,invalidate } from "../api/client.js";
 import { useFetch } from "../hooks.js";
 
-
-import {
-  getCachedCompanyDetails,
-  setCachedCompanyDetails,
-  getCachedCompanyWorkers,
-  setCachedCompanyWorkers,
-  invalidateCompanyDetails,
-  invalidateCompanyWorkers,
-} from "../utils/companyDetailCache.js";
-
-
 const TABS = [ "Monthly stats","Workers"];
-
 
 export default function CompanyDetail() {
   const { companyId } = useParams();
@@ -34,8 +22,6 @@ export default function CompanyDetail() {
   );
 
   const PAGE_SIZE = 15;
-
-  const [workersRefreshKey, setWorkersRefreshKey] = useState(0);
   const [workerPage, setWorkerPage] = useState(
     () => location.state?.workerPage ?? 1
   );
@@ -58,61 +44,29 @@ export default function CompanyDetail() {
       previousMonth.getMonth() + 1
     ).padStart(2, "0")}`;
   });
+  const {
+  data: companyData,
+  error: companyError,
+  loading: companyLoading,
+} = useFetch(() => api.get(`/companies/${companyId}`), [companyId]);
 
+const {
+  data: workerData,
+  error: workerError,
+  loading: workersLoading,
+  reload: reloadWorkers,
+} = useFetch(
+  () =>
+    api.get(
+      `/workers?companyId=${companyId}&status=${workerStatus}&month=${month}&page=${workerPage}&limit=${PAGE_SIZE}`,
+    ),
+  [companyId, workerPage, workerStatus, month],
+);
 
-    const {
-      data: companyData,
-      error: companyError,
-      loading: companyLoading,
-    } = useFetch(async () => {
-      const cached = getCachedCompanyDetails(companyId);
-
-      if (cached) return cached;
-
-      const response = await api.get(`/companies/${companyId}`);
-      setCachedCompanyDetails(companyId, response);
-
-      return response;
-    }, [companyId]);
-
-
-    const {
-      data: workerData,
-      error: workerError,
-      loading: workersLoading,
-    } = useFetch(async () => {
-      const cached = getCachedCompanyWorkers(
-        companyId,
-        workerPage,
-        PAGE_SIZE,
-        workerStatus,
-        month
-      );
-
-      if (cached) return cached;
-
-      const response = await api.get(
-        `/workers?companyId=${companyId}&status=${workerStatus}&month=${month}&page=${workerPage}&limit=${PAGE_SIZE}`
-      );
-
-      setCachedCompanyWorkers(
-        companyId,
-        workerPage,
-        PAGE_SIZE,
-        response,
-        workerStatus,
-        month
-      );
-
-      return response;
-    }, [
-      companyId,
-      workerPage,
-      workersRefreshKey,
-      workerStatus,
-      month,
-    ]);
-
+async function refreshWorkers() {
+  invalidate(`/workers?companyId=${companyId}`);
+  await reloadWorkers();
+}
 
   const company = companyData?.company || companyData;
   const workers = workerData?.workers || [];
@@ -157,7 +111,7 @@ export default function CompanyDetail() {
 
         {(companyError || workerError) && (
           <p role="alert" className="mb-4 text-sm text-danger">
-            {(companyError || workerError).message ||
+            {(companyError || workerError) ||
               "Failed to load company details."}
           </p>
         )}
@@ -210,7 +164,7 @@ export default function CompanyDetail() {
                     setPage={setWorkerPage}
                     hasNextPage={hasNextPage}
                     workersLoading={workersLoading}
-                    setWorkersRefreshKey={setWorkersRefreshKey}
+                    onRefresh={refreshWorkers}
                     PAGE_SIZE={PAGE_SIZE}
                   />
                 )}

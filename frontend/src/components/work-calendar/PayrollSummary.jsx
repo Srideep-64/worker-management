@@ -1,12 +1,7 @@
-
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
-import { api } from "../../api/client.js";
-import {
-  getCachedPayroll,
-  setCachedPayroll,
-  invalidateCachedPayroll,
-} from "../../utils/profileCache.js";
+import { api,invalidate } from "../../api/client.js";
+import { useFetch } from "../../hooks.js";
 
 function Stat({ label, value, valueClassName = "text-text" }) {
   return (
@@ -41,15 +36,12 @@ function formatDate(value) {
 
 export default function PayrollSummary({
   workerId,
+  companyId,
   month,
-  summary,
-  refreshRef,
+  refreshKey,
 }) {
   // Collapsed by default. Do not fetch payroll until opened.
   const [expanded, setExpanded] = useState(false);
-
-  const [payroll, setPayroll] = useState(null);
-  const [payrollLoading, setPayrollLoading] = useState(false);
   const [payrollError, setPayrollError] = useState("");
 
   const [savingRate, setSavingRate] = useState(false);
@@ -65,88 +57,32 @@ export default function PayrollSummary({
   const [advanceDate, setAdvanceDate] = useState("");
   const [advanceNote, setAdvanceNote] = useState("");
 
-  const loadPayroll = useCallback(
-    async ({ force = false } = {}) => {
-      // Never load payroll while the panel is collapsed.
-      if (!expanded) return;
-
-      if (!force) {
-        const cached = getCachedPayroll(workerId, month);
-
-        const hasRequiredFields =
-          cached &&
-          "totalHours" in cached &&
-          "absentDays" in cached &&
-          "grossPay" in cached &&
-          "absenceDeduction" in cached &&
-          "netPay" in cached &&
-          "remainingPay" in cached;
-
-        if (hasRequiredFields) {
-          setPayroll(cached);
-          setHourlyRate(
-            cached.hourlyRate == null
-              ? ""
-              : String(cached.hourlyRate),
-          );
-          setPayrollError("");
-          setPayrollLoading(false);
-          return;
-        }
-      }
-
-      setPayrollLoading(true);
-      setPayrollError("");
-
-      try {
-        const url = `/workers/${workerId}/payroll?month=${encodeURIComponent(
-          month,
-        )}${
-          force ? `&_refresh=${Date.now()}` : ""
-        }`;
-
-        const result = await api.get(url);
-
-        setCachedPayroll(workerId, month, result);
-        setPayroll(result);
-        setHourlyRate(
-          result.hourlyRate == null
-            ? ""
-            : String(result.hourlyRate),
-        );
-      } catch (err) {
-        setPayrollError(
-          err?.message || "Could not load payroll information.",
-        );
-      } finally {
-        setPayrollLoading(false);
-      }
-    },
-    [workerId, month, expanded],
+  // Fetch only while the panel is open.
+  const {
+    data: payroll,
+    error: loadError,
+    loading: payrollLoading,
+    reload,
+  } = useFetch(
+    async () =>
+      expanded
+        ? api.get(`/workers/${workerId}/payroll?month=${encodeURIComponent(month)}`)
+        : null,
+    [expanded, workerId, month, refreshKey],
   );
 
-  // Fetch only when opened. Reopening can use the cached result.
+  const shownError = payrollError || loadError;
+
+  // Fill the rate input whenever fresh payroll data arrives.
   useEffect(() => {
-    if (expanded) {
-      loadPayroll();
+    if (payroll) {
+      setHourlyRate(payroll.hourlyRate == null ? "" : String(payroll.hourlyRate));
     }
-  }, [expanded, loadPayroll]);
+  }, [payroll]);
 
-  // Allow the parent to request a payroll refresh.
-  // If collapsed, defer the request until the user opens the panel.
-  useEffect(() => {
-    if (!refreshRef) return;
-
-    refreshRef.current = () => {
-      if (expanded) {
-        return loadPayroll({ force: true });
-      }
-    };
-
-    return () => {
-      refreshRef.current = null;
-    };
-  }, [refreshRef, expanded, loadPayroll]);
+  function invalidateAfterWrite() {
+    invalidate(workerId, companyId, "/dashboard");
+  }
 
   async function saveHourlyRate(event) {
     event.preventDefault();
@@ -172,8 +108,8 @@ export default function PayrollSummary({
         hourlyRate: rate,
       });
 
-      invalidateCachedPayroll(workerId, month);
-      await loadPayroll({ force: true });
+      invalidateAfterWrite();
+      await reload();
     } catch (err) {
       setPayrollError(
         err?.message || "Could not save the hourly rate.",
@@ -222,8 +158,8 @@ export default function PayrollSummary({
       setAdvanceNote("");
       setShowAddAdvanceModal(false);
 
-      invalidateCachedPayroll(workerId, month);
-      await loadPayroll({ force: true });
+      invalidateAfterWrite();
+      await reload();
     } catch (err) {
       setPayrollError(
         err?.message || "Could not add the advance payment.",
@@ -256,8 +192,8 @@ export default function PayrollSummary({
       });
 
       setShowClearRemainingConfirm(false);
-      invalidateCachedPayroll(workerId, month);
-      await loadPayroll({ force: true });
+      invalidateAfterWrite();
+      await reload();
     } catch (err) {
       setPayrollError(
         err?.message || "Could not clear the remaining pay.",
@@ -278,8 +214,8 @@ export default function PayrollSummary({
         `/workers/${workerId}/advances/${advanceId}`,
       );
 
-      invalidateCachedPayroll(workerId, month);
-      await loadPayroll({ force: true });
+      invalidateAfterWrite();
+      await reload();
     } catch (err) {
       setPayrollError(
         err?.message || "Could not delete the advance payment.",
@@ -289,13 +225,8 @@ export default function PayrollSummary({
     }
   }
 
-  const totalHours = Number(
-    payroll?.totalHours ?? summary?.totalHours ?? 0,
-  );
-
-  const absentDays = Number(
-    payroll?.absentDays ?? summary?.absentDays ?? 0,
-  );
+  const totalHours = Number(payroll?.totalHours ?? 0);
+  const absentDays = Number(payroll?.absentDays ?? 0);
 
   const rateIsSet = payroll?.hourlyRate != null;
   const grossPay = payroll?.grossPay ?? null;
@@ -338,9 +269,9 @@ export default function PayrollSummary({
       {/* Payroll and advances are loaded/rendered only when expanded */}
       {expanded && (
         <div className="mt-4 space-y-4">
-          {payrollError && (
+          {shownError && (
             <p role="alert" className="text-sm text-danger">
-              {payrollError}
+              {shownError}
             </p>
           )}
 

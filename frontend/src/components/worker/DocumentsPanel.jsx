@@ -1,13 +1,8 @@
 import { useRef, useState } from "react";
 import { Eye, Download, Upload } from "lucide-react";
-import { api, ApiError } from "../../api/client.js";
+import { api, ApiError, invalidate } from "../../api/client.js";
 import { useFetch, fmtDate, DOC_LABELS } from "../../hooks.js";
 import ExpiryBadge from "../ui/ExpiryBadge.jsx";
-import {
-  getCachedWorkerDocuments,
-  setCachedWorkerDocuments,
-  invalidateWorkerDocuments,
-} from "../../utils/profileCache.js";
 
 // Which worker fields belong to which document type.
 const FIELDS = [
@@ -77,28 +72,17 @@ function DocRow({ worker, spec, doc, onChanged }) {
 }
 
 export default function DocumentsPanel({ worker }) {
-  const { data, error, reload } = useFetch(async () => {
-    const cached = getCachedWorkerDocuments(worker.id);
-
-    if (cached !== null) {
-      return cached;
-    }
-
-    const response = await api.get(
+  const { data, error, reload } = useFetch(async () => 
+     api.get(
       `/workers/${worker.id}/documents`
-    );
-
-    setCachedWorkerDocuments(worker.id, response);
-
-    return response;
-  }, [worker.id]);
+    ), [worker.id]);
 
   const byType = Object.fromEntries(
     (data?.documents || []).map((d) => [d.type, d])
   );
 
   const changed = async () => {
-    invalidateWorkerDocuments(worker.id);
+    invalidate(`/workers/${worker.id}/documents`);
     await reload();
   };
 

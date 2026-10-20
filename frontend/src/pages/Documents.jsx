@@ -6,7 +6,7 @@ import Card from "../components/ui/Card.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
 import ExpiryBadge from "../components/ui/ExpiryBadge.jsx";
 
-import { api } from "../api/client.js";
+import { api,invalidate } from "../api/client.js";
 import { useFetch, DOC_LABELS } from "../hooks.js";
 
 import {
@@ -15,8 +15,6 @@ import {
 } from "../utils/scrollPosition.js";
 
 // Cache each expiry window indefinitely until manually refreshed.
-const expiringDocumentsCache = new Map();
-
 const DOCUMENTS_STATE_KEY = "documents-page-state";
 
 function getSavedDocumentsState() {
@@ -72,18 +70,10 @@ const PAGE_SIZE = 25;
     );
   }, [search, type, days, status, page]);
 
-  const { data, error, loading, reload } = useFetch(async () => {
-    // Reuse cached data for this expiry window.
-    if (expiringDocumentsCache.has(days)) {
-      return expiringDocumentsCache.get(days);
-    }
-
-    const response = await api.get(`/documents/expiring?days=${days}`);
-
-    expiringDocumentsCache.set(days, response);
-
-    return response;
-  }, [days]);
+  const { data, error, loading, reload } = useFetch(
+    () => api.get(`/documents/expiring?days=${days}`),
+    [days],
+  );
 
   useRestoreScrollPosition("/documents", !loading );
 
@@ -93,7 +83,7 @@ const PAGE_SIZE = 25;
     setRefreshing(true);
 
     // Invalidate only the currently selected expiry window.
-    expiringDocumentsCache.delete(days);
+    invalidate("/documents/expiring");
 
     try {
       // One request; don't also change a dependency to trigger another.
