@@ -79,3 +79,37 @@ export function invalidateCompanyDetailCache(companyId) {
   invalidateCompanyDetails(companyId);
   invalidateCompanyWorkers(companyId);
 }
+
+export function updateCachedWorkerSummary(
+  companyId,
+  workerId,
+  month,
+  summary,
+) {
+  if (!companyId || !workerId || !month || !summary) return;
+
+  const prefix = `${companyId}:${month}:`;
+
+  for (const [key, data] of companyWorkersCache.entries()) {
+    if (!key.startsWith(prefix) || !Array.isArray(data?.workers)) {
+      continue;
+    }
+
+    if (!data.workers.some((worker) => worker.id === workerId)) {
+      continue;
+    }
+
+    companyWorkersCache.set(key, {
+      ...data,
+      workers: data.workers.map((worker) =>
+        worker.id === workerId
+          ? {
+              ...worker,
+              totalHours: summary.totalHours,
+              absentDays: summary.absentDays,
+            }
+          : worker,
+      ),
+    });
+  }
+}

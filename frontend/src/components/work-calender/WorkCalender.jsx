@@ -42,6 +42,8 @@ import {
   pad,
 } from "./workCalendarUtils.js";
 
+import { updateCachedWorkerSummary } from "../../utils/companyDetailCache.js";
+
 
   function getRecordEntryValue(record) {
     if (!record || record.source !== "MANUAL") return "";
@@ -57,10 +59,18 @@ import {
     );
   }
 
-export default function WorkCalendar({ workerId, companyId, onMonthChange, onWorkUpdated }) {
+export default function WorkCalendar({ workerId, companyId,initialMonth, onMonthChange, onWorkUpdated }) {
   const today = dateKey(new Date());
 
   const [ym, setYm] = useState(() => {
+    if (initialMonth && /^\d{4}-\d{2}$/.test(initialMonth)) {
+      const [year, monthNumber] = initialMonth.split("-").map(Number);
+
+      if (monthNumber >= 1 && monthNumber <= 12) {
+        return { y: year, m: monthNumber - 1 };
+      }
+    }
+
     const previousMonth = new Date();
     previousMonth.setDate(1);
     previousMonth.setMonth(previousMonth.getMonth() - 1);
@@ -587,10 +597,19 @@ async function confirmUpload() {
     setEntryValue("");
     setSaveError("");
 
-    await reload();
+    const workResponse = await reload();
+
+    if (workResponse?.summary) {
+      updateCachedWorkerSummary(
+        companyId,
+        workerId,
+        month,
+        workResponse.summary,
+      );
+    }
+
     onWorkUpdated?.();
   } catch (err) {
-    // Keep drafts if the batch fails so the user can retry.
     setSaveError(
       err?.message || "Could not upload attendance records.",
     );

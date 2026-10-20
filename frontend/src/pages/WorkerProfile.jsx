@@ -33,26 +33,6 @@ function Field({ label, value }) {
   );
 }
 
-function Avatar({ workerId, version, hasPhoto }) {
-  const [failed, setFailed] = useState(false);
-
-  if (!hasPhoto || failed) {
-    return (
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-paper text-text-muted">
-        <User className="h-7 w-7" strokeWidth={1.5} />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={`/api/workers/${encodeURIComponent(workerId)}/documents/PHOTO/file?v=${version}`}
-      alt=""
-      onError={() => setFailed(true)}
-      className="h-16 w-16 shrink-0 rounded-full bg-paper object-cover"
-    />
-  );
-}
 
 export default function WorkerProfile() {
   const { workerId } = useParams();
@@ -80,8 +60,6 @@ export default function WorkerProfile() {
 
   const [editing, setEditing] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const [photoVersion, setPhotoVersion] = useState(0);
-  const [hasPhoto, setHasPhoto] = useState(false);
   const [documentsExpanded, setDocumentsExpanded] = useState(false);
 
   const location = useLocation();
@@ -90,8 +68,11 @@ export default function WorkerProfile() {
   const returnLabel = location.state?.returnLabel || "Workers";
 
   const [selectedMonth, setSelectedMonth] = useState(() => {
-  const now = new Date();
+    if (location.state?.profileMonth) {
+      return location.state.profileMonth;
+    }
 
+    const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
@@ -149,12 +130,9 @@ export default function WorkerProfile() {
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            <Avatar
-              key={photoVersion}
-              workerId={worker.id}
-              version={photoVersion}
-                hasPhoto={hasPhoto}
-            />
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-paper text-text-muted">
+              <User className="h-7 w-7" strokeWidth={1.5} />
+            </div>
 
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-accent-dark">
@@ -258,10 +236,6 @@ export default function WorkerProfile() {
           <div className="mt-4">
             <DocumentsPanel
               worker={worker}
-              onPhotoChanged={() =>
-                setPhotoVersion((version) => version + 1)
-              }
-              onPhotoAvailabilityChange={setHasPhoto}
             />
           </div>
         )}
@@ -271,6 +245,7 @@ export default function WorkerProfile() {
         <WorkCalendar
           workerId={worker.id}
           companyId={worker.companyId}
+          initialMonth={location.state?.profileMonth}
           onMonthChange={setSelectedMonth}
           onWorkUpdated={notifyWorkUpdated}
         />

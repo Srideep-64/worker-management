@@ -7,6 +7,7 @@ import { createWorkerSchema, listWorkersQuerySchema, updateWorkerSchema } from "
 import {
   currentUaeMonthString,
   dateOnly,
+  monthRange,
 } from "../utils/dates.js";
 import { getWorkerStatus,getWorkerStatusForMonth } from "../utils/workerStatus.js";
 
@@ -16,6 +17,7 @@ function withWorkerStatus(worker) {
     status: getWorkerStatus(worker),
   };
 }
+
 
 export const listWorkers = asyncHandler(async (req, res) => {
   const {
@@ -27,81 +29,151 @@ export const listWorkers = asyncHandler(async (req, res) => {
     limit,
   } = listWorkersQuerySchema.parse(req.query);
 
-  const reportingMonth =
-    month || currentUaeMonthString();
+  const reportingMonth = month || currentUaeMonthString();
+  const { start, end } = monthRange(reportingMonth);
 
   const where = {};
+  const conditions = [];
 
   if (companyId) {
     where.companyId = companyId;
   }
 
   if (search) {
-    where.OR = [
-      {
-        workerCode: {
-          contains: search,
-          mode: "insensitive",
+    conditions.push({
+      OR: [
+        {
+          workerCode: {
+            contains: search,
+            mode: "insensitive",
+          },
         },
-      },
-      {
-        name: {
-          contains: search,
-          mode: "insensitive",
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
         },
-      },
-    ];
+      ],
+    });
   }
 
-  const allWorkers = await prisma.worker.findMany({
-    where,
-    orderBy: [
-      { name: "asc" },
-      { workerCode: "asc" },
-    ],
-    select: {
-      id: true,
-      workerCode: true,
-      name: true,
-      jobTitle: true,
-      nationality: true,
-      joiningDate: true,
-      leavingDate: true,
-      company: {
-        select: {
-          id: true,
-          name: true,
-          code:true,
-        },
+  // Filter employment status in the database before pagination.
+  if (status === "ACTIVE") {
+    conditions.push(
+      { joiningDate: { lt: end } },
+      {
+        OR: [
+          { leavingDate: null },
+          { leavingDate: { gte: start } },
+        ],
       },
-    },
-  });
+    );
+  } else if (status === "INACTIVE") {
+    conditions.push({
+      OR: [
+        { joiningDate: { gte: end } },
+        { leavingDate: { lt: start } },
+      ],
+    });
+  }
 
-  const workersWithStatus = allWorkers.map((worker) => ({
-    ...worker,
-    status: getWorkerStatusForMonth(worker, reportingMonth),
-  }));
+  if (conditions.length > 0) {
+    where.AND = conditions;
+  }
 
-  const filteredWorkers =
-    status === "ALL"
-      ? workersWithStatus
-      : workersWithStatus.filter(
-          (worker) => worker.status === status,
-        );
-
-  const total = filteredWorkers.length;
   const skip = (page - 1) * limit;
 
+  // Fetch only the requested page and the total count.
+  const [pageWorkers, total] = await Promise.all([
+    prisma.worker.findMany({
+      where,
+      orderBy: [
+        { name: "asc" },
+        { workerCode: "asc" },
+      ],
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        workerCode: true,
+        name: true,
+        jobTitle: true,
+        nationality: true,
+        joiningDate: true,
+        leavingDate: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+      },
+    }),
+
+    prisma.worker.count({ where }),
+  ]);
+
+  const workerIds = pageWorkers.map((worker) => worker.id);
+
+  // Aggregate only the selected workers' records for this month.
+  const attendanceGroups = workerIds.length
+    ? await prisma.workRecord.groupBy({
+        by: ["workerId", "status"],
+        where: {
+          workerId: { in: workerIds },
+          workDate: { gte: start, lt: end },
+        },
+        _sum: {
+          hours: true,
+        },
+        _count: {
+          _all: true,
+        },
+      })
+    : [];
+
+  const attendanceByWorker = new Map(
+    pageWorkers.map((worker) => [
+      worker.id,
+      { totalHours: 0, absentDays: 0 },
+    ]),
+  );
+
+  for (const group of attendanceGroups) {
+    const summary = attendanceByWorker.get(group.workerId);
+
+    if (!summary) continue;
+
+    if (group.status === "WORKED") {
+      summary.totalHours += Number(group._sum.hours ?? 0);
+    }
+
+    if (group.status === "ABSENT") {
+      summary.absentDays += group._count._all;
+    }
+  }
+
+  const workers = pageWorkers.map((worker) => ({
+    ...worker,
+    status: getWorkerStatusForMonth(worker, reportingMonth),
+    totalHours: attendanceByWorker.get(worker.id).totalHours,
+    absentDays: attendanceByWorker.get(worker.id).absentDays,
+  }));
+
   res.json({
-    workers: filteredWorkers.slice(skip, skip + limit),
+    workers,
     pagination: {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
+      hasNextPage: skip + workers.length < total,
     },
   });
 });
+
 
 
 export const getWorker = asyncHandler(async (req, res) => {

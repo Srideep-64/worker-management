@@ -55,7 +55,7 @@ export default function Workers() {
   );
   const [adding, setAdding] = useState(false);
 
-  const debouncedSearch = useDebounced(search);
+  const debouncedSearch = useDebounced(search, 400);
   
   const {
     data: lookups,

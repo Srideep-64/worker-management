@@ -1,4 +1,4 @@
-import { useRef, useState,useEffect } from "react";
+import { useRef, useState } from "react";
 import { Eye, Download, Upload } from "lucide-react";
 import { api, ApiError } from "../../api/client.js";
 import { useFetch, fmtDate, DOC_LABELS } from "../../hooks.js";
@@ -76,7 +76,7 @@ function DocRow({ worker, spec, doc, onChanged }) {
   );
 }
 
-export default function DocumentsPanel({ worker, onPhotoChanged, onPhotoAvailabilityChange, }) {
+export default function DocumentsPanel({ worker }) {
   const { data, error, reload } = useFetch(async () => {
     const cached = getCachedWorkerDocuments(worker.id);
 
@@ -97,13 +97,8 @@ export default function DocumentsPanel({ worker, onPhotoChanged, onPhotoAvailabi
     (data?.documents || []).map((d) => [d.type, d])
   );
 
-  useEffect(() => {
-  onPhotoAvailabilityChange?.(Boolean(byType.PHOTO));
-}, [byType.PHOTO, onPhotoAvailabilityChange]);
-
   const changed = async () => {
     invalidateWorkerDocuments(worker.id);
-    onPhotoChanged?.();
     await reload();
   };
 

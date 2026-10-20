@@ -28,61 +28,20 @@ export default function WorkersTab({
   setWorkersRefreshKey,
   PAGE_SIZE
 }) {
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const { data, error, loading } = useFetch(
-    async () => {
-      const results = await Promise.all(
-        workers.map(async (worker) => {
-          const cacheKey = `${companyId}:${month}:${worker.id}`;
-
-          const cachedSummary = getWorkerSummary(cacheKey);
-          if (cachedSummary) return cachedSummary;
-
-          const cachedWork = getCachedWork(worker.id, month);
-
-          if (cachedWork) {
-            const summary = {
-              workerId: worker.id,
-              totalHours: cachedWork.summary?.totalHours ?? 0,
-              absentDays: cachedWork.summary?.absentDays ?? 0,
-              failed: false,
-            };
-
-            setWorkerSummary(cacheKey, summary);
-            return summary;
-          }
-
-          try {
-            const response = await api.get(
-              `/workers/${worker.id}/work?month=${month}`
-            );
-
-            setCachedWork(worker.id, month, response);
-
-            const summary = {
-              workerId: worker.id,
-              totalHours: response.summary?.totalHours ?? 0,
-              absentDays: response.summary?.absentDays ?? 0,
-              failed: false,
-            };
-
-            setWorkerSummary(cacheKey, summary);
-            return summary;
-          } catch {
-            return { workerId: worker.id, failed: true };
-          }
-        })
-      );
-
-      return results;
-    },
-    [companyId, workers, month, refreshKey]
-  );
+  const loading = workersLoading;
+  const error = null;
 
   const hoursByWorker = new Map(
-    (data || []).map((item) => [item.workerId, item])
-  );
+  workers.map((worker) => [
+    worker.id,
+    {
+      workerId: worker.id,
+      totalHours: worker.totalHours ?? 0,
+      absentDays: worker.absentDays ?? 0,
+      failed: false,
+    },
+  ])
+);
 
   function changeMonth(offset) {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -94,13 +53,11 @@ export default function WorkersTab({
       ).padStart(2, "0")}`
     );
 
-    setPage(1);
+    
   }
 
   function handleRefresh() {
-    invalidateWorkerSummaries(companyId, month);
     invalidateCompanyWorkers(companyId);
-    setRefreshKey((key) => key + 1);
     setWorkersRefreshKey((key) => key + 1);
   }
 
@@ -131,7 +88,6 @@ return (
           onChange={(event) => {
             if (event.target.value) {
               setMonth(event.target.value);
-              setPage(1);
             }
           }}
         />
@@ -235,6 +191,7 @@ return (
                           returnWorkerPage: page,
                           returnWorkerStatus: workerStatus,
                           returnMonth: month,
+                          profileMonth:month,
                         }}
                         className="font-medium text-accent hover:underline"
                       >

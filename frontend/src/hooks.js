@@ -38,6 +38,8 @@ export function useFetch(fn, deps) {
         error: err?.message || "Failed to load",
         loading: false,
       });
+
+      throw err;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
