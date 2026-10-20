@@ -4,11 +4,11 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { monthRange, currentMonthString, formatReportMonth } from "../utils/dates.js";
+import { monthRange,monthSchema, currentMonthString, formatReportMonth } from "../utils/dates.js";
 import { getCompanyMonthlyReport } from "../utils/companyMonthlyReport.js";
 
 export const companyReportQuerySchema = z.object({
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+  month: monthSchema.optional(),
 });
 
 export const getCompanyReportChecks = asyncHandler(async (req, res) => {
@@ -27,22 +27,10 @@ export const getCompanyReportChecks = asyncHandler(async (req, res) => {
   const workers = await prisma.worker.findMany({
     where: {
         companyId: company.id,
+        joiningDate: { lt: end },
         OR: [
-          {
-            joiningDate: { lt: end },
-            leavingDate: null,
-          },
-          {
-            joiningDate: { lt: end },
-            leavingDate: { gte: start },
-          },
-          {
-            workRecords: {
-              some: {
-                workDate: { gte: start, lt: end },
-              },
-            },
-          },
+          { leavingDate: null },
+          { leavingDate: { gte: start } },
         ],
       },
     orderBy: { workerCode: "asc" },

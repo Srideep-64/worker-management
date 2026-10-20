@@ -5,22 +5,16 @@ import {
   RefreshCw,
   LoaderCircle,
   ChartNoAxesColumn,
-  LucideFileCheck,
-  UserShield,
-  ChartBarIncreasing,
-  ChartBarIncreasingIcon,
-  ChartLine,
-  TrendingUp,
-  TrendingUpIcon,
-  IndentIncrease,
-  ChartNoAxesColumnIncreasingIcon,
+  UserShieldIcon,
+  FileDown,
+  LucideUpload
 } from "lucide-react";
 
 const items = [
-  { label: "Workers", Icon: UserShield },
+  { label: "Upload", Icon: LucideUpload },
   { label: "Companies", Icon: Building2},
   { label: "Work records", Icon: CalendarCheck },
-  { label: "Documents", Icon: LucideFileCheck },
+  { label: "Documents", Icon: FileDown },
   { label: "Monthly Stats", Icon: ChartNoAxesColumn},
 ];
 
@@ -56,11 +50,13 @@ export default function BackendLoadingScreen({
           <div className="absolute h-32 w-32 rounded-full border border-accent/20" />
 
           {/* Central logo */}
-          <div className="relative z-10 flex h-20 w-20 animate-pulse items-center justify-center rounded-2xl border border-border bg-surface shadow-card">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-xl font-bold text-white">
-              W
-            </div>
-          </div>
+          {/* Central runner */}
+
+
+<div className="relative z-10 flex h-20 w-20 items-center justify-center rounded-2xl border border-border bg-surface shadow-card">
+  <span className="absolute inset-0 animate-ping rounded-2xl border-2 border-accent opacity-30" />
+  <UserShieldIcon className="h-10 w-10 text-accent" strokeWidth={1.6} style={{ animation: "workforce-float 2.4s ease-in-out infinite" }} />
+</div>
 
           {/* Five application icons */}
           {items.map(({ label, Icon }, index) => {
@@ -143,6 +139,16 @@ export default function BackendLoadingScreen({
           0% { transform: translateX(-100%); }
           100% { transform: translateX(200%); }
         }
+@keyframes wf-spin     { to { transform: rotate(360deg); } }
+@keyframes wf-spin-rev { to { transform: rotate(-360deg); } }
+@keyframes wf-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="wf-"] { animation: none !important; }
+}
       `}</style>
     </main>
   );

@@ -32,11 +32,13 @@ useRestoreScrollPosition("/", !loading);
         </div>
       </div>
 
-      { documents.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          Nothing expiring soon.
-        </p>
-      ) : (
+        {loading ? (
+          <p className="py-6 text-center text-sm text-text-muted">Loading...</p>
+        ) : documents.length === 0 ? (
+          <p className="py-6 text-center text-sm text-text-muted">
+            Nothing expiring soon.
+          </p>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-left text-sm">
             <thead>

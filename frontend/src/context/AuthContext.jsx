@@ -8,7 +8,7 @@ import {
   useRef,
 } from "react";
 
-import { api, ApiError } from "../api/client.js";
+import { api, ApiError, clearCache } from "../api/client.js";
 import BackendLoadingScreen from "../components/layout/BackendLoadingScreen.jsx";
 
 const AuthContext = createContext(null);
@@ -112,7 +112,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const data = await api.post("/auth/login", { email, password });
-
+    clearCache();
     setUser(data.user);
     setStatus("authenticated");
     setConnectionError("");
@@ -124,6 +124,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post("/auth/logout");
     } finally {
+      clearCache();
       setUser(null);
       setStatus("anonymous");
       setConnectionError("");
