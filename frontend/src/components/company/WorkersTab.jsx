@@ -169,7 +169,7 @@ return (
                           returnMonth: month,
                           profileMonth:month,
                         }}
-                        className="font-medium text-accent hover:underline"
+                        className="link"
                       >
                         {worker.name}
                       </Link>

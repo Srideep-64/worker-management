@@ -9,7 +9,10 @@ export default function Modal({ title, onClose, children, wide = false }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
+    <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+        onMouseDown={onClose}
+      >
       <div
         className={`max-h-[90vh] w-full overflow-y-auto rounded-lg bg-surface shadow-card ${wide ? "max-w-3xl" : "max-w-lg"}`}
         onMouseDown={(e) => e.stopPropagation()}

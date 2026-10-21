@@ -101,7 +101,7 @@ export default function TimesheetDetailsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="timesheet-modal-title"
-        className="w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-900 shadow-2xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        className="w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-surface text-gray-900 shadow-2xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">

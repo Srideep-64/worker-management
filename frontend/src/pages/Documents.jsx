@@ -213,7 +213,7 @@ const PAGE_SIZE = 25;
                     </td>
                     <td className="py-2.5 font-medium">
                       <Link
-                        className="text-accent-dark hover:underline"
+                        className="link"
                         to={`/workers/${i.workerId}`}
                         state={{
                           returnTo: "/documents",

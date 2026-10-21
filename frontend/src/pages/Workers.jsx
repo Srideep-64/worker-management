@@ -279,7 +279,7 @@ export default function Workers() {
                     <td className="px-3 py-3 font-medium">
                       <Link
                         to={`/workers/${worker.id}`}
-                        className="text-accent-dark hover:underline"
+                        className="link"
                           state={{
                             returnTo: "/workers",
                             returnLabel: "Workers",

@@ -72,7 +72,7 @@ useRestoreScrollPosition("/", !loading);
                     <td className="px-3 py-3">
                       <Link
                         to={`/workers/${document.workerId}`}
-                        className="font-medium text-accent hover:underline"
+                        className="link"
                         state={{
                           returnTo: "/",
                           returnLabel:"Dashboard",

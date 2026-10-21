@@ -1,57 +1,44 @@
-
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 
 import Modal from "../ui/Modal.jsx";
-import { api,invalidate } from "../../api/client.js";
+import { api, invalidate } from "../../api/client.js";
 
 function formatDate(value) {
   if (!value) return "—";
-
   const date = new Date(value);
-
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
 }
 
 function getValidationErrors(error) {
   const errors =
-    error?.details?.errors ??
-    error?.details ??
-    error?.payload?.errors;
-
+    error?.details?.errors ?? error?.details ?? error?.payload?.errors;
   return Array.isArray(errors) ? errors : [];
 }
 
-function getPreviousUaeMonth() {
+function uaeMonth(offset = 0) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Dubai",
     year: "numeric",
     month: "2-digit",
   }).formatToParts(new Date());
+  const v = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const d = new Date(Number(v.year), Number(v.month) - 1 + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
+function describeSnapshot(snapshot) {
+  if (!snapshot) return "—";
+  return (
+    [snapshot.role, snapshot.hours != null ? `${snapshot.hours} h` : null, snapshot.status]
+      .filter(Boolean)
+      .join(" · ") || "—"
   );
-
-  const currentMonth = new Date(
-    Number(values.year),
-    Number(values.month) - 1,
-    1,
-  );
-
-  currentMonth.setMonth(currentMonth.getMonth() - 1);
-
-  const year = currentMonth.getFullYear();
-  const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
-
-  return `${year}-${month}`;
 }
 
 export default function UploadModal({ companies, onClose, onDone }) {
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? "");
-  const [periodMonth, setPeriodMonth] = useState(getPreviousUaeMonth);
+  const [periodMonth, setPeriodMonth] = useState(() => uaeMonth(-1));
   const [file, setFile] = useState(null);
 
   const [step, setStep] = useState("form");
@@ -59,21 +46,80 @@ export default function UploadModal({ companies, onClose, onDone }) {
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState([]);
   const [result, setResult] = useState(null);
-  const [showManualConflictModal, setShowManualConflictModal] =
-    useState(false);
+
+  // The only decision left to the user: replace the active timesheet.
+  // Nothing is ever deleted by an upload.
+  const [supersedeTimesheet, setSupersedeTimesheet] = useState(false);
+
+  const manualConflicts = result?.manualConflicts ?? [];
+  const manualConflictCount = result?.manualConflictCount ?? manualConflicts.length;
+  const hasManualConflicts = manualConflictCount > 0;
+  const hasTimesheetConflict = Boolean(result?.conflict);
+  const noUsefulChanges = hasTimesheetConflict && result?.hasUsefulChanges === false;
+  const summary = result?.summary;
+  const visibleChanges = (result?.timesheetChanges ?? []).filter((c) => c.type !== "REMOVED");
+  const changesTotal = result?.timesheetChangesTotal ?? visibleChanges.length;
+  const manualWorkerCount = new Set(manualConflicts.map((c) => c.workerCode)).size;
+  const removedRecords = result?.removedRecords ?? [];
+  const removedCount = result?.removedCount ?? removedRecords.length;
+  const blocked = hasManualConflicts || removedCount > 0;
+  const activeSourceUrl = result?.conflict
+    ? `/api/timesheets/${result.conflict.existingUploadId}/source`
+    : null;
+  // Lists in the preview are capped by the server; the CSV has everything.
+  const reviewCsvUrl = result?.upload?.id
+    ? `/api/timesheets/${result.upload.id}/diff.csv`
+    : null;
+
+  const summaryParts = [];
+  if (summary) {
+    summaryParts.push(
+      hasTimesheetConflict
+        ? `${summary.totalRows} rows in file`
+        : `${summary.rowsToCreate} new row${summary.rowsToCreate === 1 ? "" : "s"} will be created`,
+    );
+    if (summary.manualToRelabel > 0) {
+      summaryParts.push(
+        `${summary.manualToRelabel} manual record${summary.manualToRelabel === 1 ? "" : "s"} re-labelled as timesheet`,
+      );
+    }
+  }
+
+  // Only one ACTIVE timesheet per company and month, so replacing it is
+  // required. Blockers (manual overlaps, dropped records) must be fixed in
+  // the file first.
+  const canImport =
+    !busy &&
+    !noUsefulChanges &&
+    !blocked &&
+    (!hasTimesheetConflict || supersedeTimesheet);
+
+  // Dismissing the preview cancels the pending upload so it doesn't linger as
+  // PROCESSING. Best effort: the server also expires stale ones.
+  async function handleClose() {
+    const uploadId = result?.upload?.id;
+    if (!busy && step === "preview" && uploadId && result?.upload?.status === "PROCESSING") {
+      try {
+        await api.post(`/timesheets/${uploadId}/cancel`, {});
+        invalidate("/timesheets");
+      } catch {
+        /* ignore */
+      }
+    }
+    onClose();
+  }
 
   function resetForm() {
     setStep("form");
     setFile(null);
     setResult(null);
-    setShowManualConflictModal(false);
+    setSupersedeTimesheet(false);
     setError("");
     setValidationErrors([]);
   }
 
   async function handleUpload(event) {
     event.preventDefault();
-
     if (!companyId || !periodMonth || !file) {
       setError("Select a company, month, and Excel file.");
       return;
@@ -90,18 +136,12 @@ export default function UploadModal({ companies, onClose, onDone }) {
 
     try {
       const response = await api.post("/timesheets/upload", formData);
-
       invalidate("/timesheets", "/companies", "/workers", "/dashboard");
-
       setResult(response);
+      setSupersedeTimesheet(false);
       setStep("preview");
-
-      if ((response?.manualConflicts?.length ?? 0) > 0) {
-        setShowManualConflictModal(true);
-      }
     } catch (err) {
       const errors = getValidationErrors(err);
-
       if (errors.length > 0 || err?.status === 422) {
         setValidationErrors(errors);
         setStep("errors");
@@ -113,9 +153,8 @@ export default function UploadModal({ companies, onClose, onDone }) {
     }
   }
 
-  async function handleConfirm(replace = false, supersedeManual = false) {
+  async function handleConfirm() {
     const uploadId = result?.upload?.id;
-
     if (!uploadId) {
       setError("Upload information is missing. Please upload the file again.");
       return;
@@ -125,31 +164,33 @@ export default function UploadModal({ companies, onClose, onDone }) {
     setError("");
 
     try {
-      await api.post(`/timesheets/${uploadId}/confirm`, {
-        replace,
-        supersedeManual,
+      const response = await api.post(`/timesheets/${uploadId}/confirm`, {
+        replace: supersedeTimesheet,
       });
-
-      setShowManualConflictModal(false);
-      onDone();
+      onDone(response);
     } catch (err) {
       const errors = getValidationErrors(err);
-
       if (errors.length > 0 || err?.status === 422) {
         setValidationErrors(errors);
         setStep("errors");
       } else if (
         err?.status === 409 &&
-        err?.details?.manualConflicts?.length
+        (err?.details?.manualConflicts?.length || err?.details?.removedRecords?.length)
       ) {
+        // Data changed since the preview: show the new blockers.
         setResult((current) => ({
           ...current,
-          manualConflicts: err.details.manualConflicts,
+          manualConflicts: err.details.manualConflicts ?? current.manualConflicts,
+          manualConflictCount:
+            err.details.manualConflictCount ?? current.manualConflictCount,
+          removedRecords: err.details.removedRecords ?? current.removedRecords,
+          removedCount: err.details.removedCount ?? current.removedCount,
         }));
-        setShowManualConflictModal(true);
-      } else if (err?.status === 409 && !replace) {
+        setError(err.message || "Blocking conflicts were found.");
+      } else if (err?.status === 409) {
         setError(
-          "An active timesheet already exists for this company and month. Use Replace & import if this upload should supersede it.",
+          err.message ||
+            "The data changed since the preview. Please upload the file again.",
         );
       } else {
         setError(err.message || "Failed to confirm timesheet.");
@@ -159,38 +200,21 @@ export default function UploadModal({ companies, onClose, onDone }) {
     }
   }
 
-  function requestConfirm(replace = false) {
-    if ((result?.manualConflicts?.length ?? 0) > 0) {
-      setShowManualConflictModal(true);
-      return;
-    }
-
-    handleConfirm(replace, false);
-  }
-
   return (
-    <Modal
-      title="Upload timesheet"
-      onClose={onClose}
-      wide={step !== "form"}
-    >
+    <Modal title="Upload timesheet" onClose={handleClose} wide={step !== "form"}>
       {step === "form" && (
         <form onSubmit={handleUpload} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="timesheet-company">
-                Company
-              </label>
-
+              <label className="label" htmlFor="timesheet-company">Company</label>
               <select
                 id="timesheet-company"
                 className="input"
                 value={companyId}
-                onChange={(event) => setCompanyId(event.target.value)}
+                onChange={(e) => setCompanyId(e.target.value)}
                 required
               >
                 <option value="">Select company</option>
-
                 {companies.map((company) => (
                   <option key={company.id} value={company.id}>
                     {company.code} — {company.name}
@@ -200,29 +224,14 @@ export default function UploadModal({ companies, onClose, onDone }) {
             </div>
 
             <div>
-              <label className="label" htmlFor="timesheet-month">
-                Month
-              </label>
-
+              <label className="label" htmlFor="timesheet-month">Month</label>
               <input
                 id="timesheet-month"
                 type="month"
                 className="input"
                 value={periodMonth}
-                max={new Intl.DateTimeFormat("en-CA", {
-                  timeZone: "Asia/Dubai",
-                  year: "numeric",
-                  month: "2-digit",
-                })
-                  .formatToParts(new Date())
-                  .filter(
-                    ({ type }) => type === "year" || type === "month",
-                  )
-                  .map(({ type, value }) =>
-                    type === "year" ? value : `-${value}`,
-                  )
-                  .join("")}
-                onChange={(event) => setPeriodMonth(event.target.value)}
+                max={uaeMonth(0)}
+                onChange={(e) => setPeriodMonth(e.target.value)}
                 required
               />
             </div>
@@ -232,15 +241,12 @@ export default function UploadModal({ companies, onClose, onDone }) {
             <label className="label" htmlFor="timesheet-file">
               Excel file (.xlsx / .xls)
             </label>
-
             <input
               id="timesheet-file"
               type="file"
               className="input"
               accept=".xlsx,.xls"
-              onChange={(event) =>
-                setFile(event.target.files?.[0] ?? null)
-              }
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
             />
           </div>
@@ -249,22 +255,12 @@ export default function UploadModal({ companies, onClose, onDone }) {
             The workbook is validated before work records are imported.
           </p>
 
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          )}
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onClose}
-              disabled={busy}
-            >
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>
               Cancel
             </button>
-
             <button
               type="submit"
               className="btn-primary"
@@ -280,8 +276,8 @@ export default function UploadModal({ companies, onClose, onDone }) {
         <div className="space-y-4">
           <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
             {validationErrors.length} validation issue
-            {validationErrors.length === 1 ? "" : "s"} found. Fix the
-            workbook and upload it again.
+            {validationErrors.length === 1 ? "" : "s"} found. Fix the workbook
+            and upload it again.
           </div>
 
           {validationErrors.length > 0 ? (
@@ -295,24 +291,13 @@ export default function UploadModal({ companies, onClose, onDone }) {
                     <th className="px-3 py-2 font-medium">Problem</th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-border">
                   {validationErrors.map((item, index) => (
-                    <tr
-                      key={`${item.sheet ?? ""}-${item.row ?? ""}-${item.field ?? ""}-${index}`}
-                    >
-                      <td className="px-3 py-2 text-text-muted">
-                        {item.sheet || "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-text-muted">
-                        {item.row ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 text-text-muted">
-                        {item.field || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-text">
-                        {item.message || "Unknown validation issue"}
-                      </td>
+                    <tr key={`${item.sheet ?? ""}-${item.row ?? ""}-${item.field ?? ""}-${index}`}>
+                      <td className="px-3 py-2 text-text-muted">{item.sheet || "—"}</td>
+                      <td className="px-3 py-2 tabular-nums text-text-muted">{item.row ?? "—"}</td>
+                      <td className="px-3 py-2 text-text-muted">{item.field || "—"}</td>
+                      <td className="px-3 py-2 text-text">{item.message || "Unknown validation issue"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -326,21 +311,10 @@ export default function UploadModal({ companies, onClose, onDone }) {
           )}
 
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={resetForm}
-              disabled={busy}
-            >
+            <button type="button" className="btn-secondary" onClick={resetForm} disabled={busy}>
               Try another file
             </button>
-
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={onClose}
-              disabled={busy}
-            >
+            <button type="button" className="btn-primary" onClick={onClose} disabled={busy}>
               Close
             </button>
           </div>
@@ -350,32 +324,236 @@ export default function UploadModal({ companies, onClose, onDone }) {
       {step === "preview" && (
         <div className="space-y-4">
           <div className="rounded-md border border-border bg-paper px-3 py-3 text-sm">
-            <p className="font-medium text-text">
-              File validated successfully.
-            </p>
+            <p className="font-medium text-text">File validated successfully.</p>
             <p className="mt-1 text-text-muted">
-              Format: {result?.format || "—"} · Records:{" "}
-              {result?.rowCount ?? 0}
+              Format: {result?.format || "—"} · Records: {result?.rowCount ?? 0}
             </p>
+            {summaryParts.length > 0 && (
+              <p className="mt-1 text-text">{summaryParts.join(" · ")}</p>
+            )}
           </div>
 
-          {result?.conflict && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
-              <p className="font-semibold">
-                An active timesheet already exists.
-              </p>
+          {/* ---------- Previous active timesheet ---------- */}
+          {hasTimesheetConflict && noUsefulChanges && (
+            <div role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-3 py-3 text-sm text-danger">
+              <p className="font-semibold">The timesheet does not update any data.</p>
               <p className="mt-1">
-                Replacing it may supersede the existing upload and its work
-                records. Confirm only if this workbook should replace it.
+                The uploaded records are identical to the active timesheet.
+                Nothing would be replaced.
               </p>
             </div>
           )}
 
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
+          {hasTimesheetConflict && !noUsefulChanges && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <div className="flex gap-2">
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                <div className="space-y-1">
+                  <p className="font-semibold">
+                    An active timesheet already exists for this company and month.
+                  </p>
+                  <p>
+                    {summary?.added ?? 0} added ({summary?.workersAdded ?? 0} worker
+                    {summary?.workersAdded === 1 ? "" : "s"}) ·{" "}
+                    {summary?.changed ?? 0} changed ({summary?.workersChanged ?? 0}) ·{" "}
+                    {summary?.removed ?? 0} missing ({summary?.workersRemoved ?? 0})
+                  </p>
+                </div>
+              </div>
+
+              {visibleChanges.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-medium">
+                    View changes ({changesTotal})
+                  </summary>
+                  {changesTotal > visibleChanges.length && reviewCsvUrl && (
+                    <p className="mt-2 text-xs">
+                      Showing the first {visibleChanges.length} of {changesTotal}.{" "}
+                      <a className="underline" href={reviewCsvUrl} download>
+                        Download full list (CSV)
+                      </a>
+                    </p>
+                  )}
+                  <div className="mt-2 max-h-56 overflow-auto rounded-md border border-border bg-surface text-text">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-paper uppercase tracking-wide text-text-muted">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Change</th>
+                          <th className="px-3 py-2 font-medium">Worker</th>
+                          <th className="px-3 py-2 font-medium">Date</th>
+                          <th className="px-3 py-2 font-medium">Previous</th>
+                          <th className="px-3 py-2 font-medium">Uploaded</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {visibleChanges.map((item, i) => (
+                          <tr key={`${item.workerId}-${item.workDate}-${i}`}>
+                            <td className="px-3 py-2 font-medium">
+                              {item.type === "ADDED" ? "Added" : "Changed"}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{item.workerCode || "—"}</div>
+                              <div className="text-text-muted">{item.workerName || "—"}</div>
+                            </td>
+                            <td className="px-3 py-2">{formatDate(item.workDate)}</td>
+                            <td className="px-3 py-2">{describeSnapshot(item.previous)}</td>
+                            <td className="px-3 py-2">{describeSnapshot(item.uploaded)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+
+              <label className="mt-3 flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={supersedeTimesheet}
+                  onChange={(e) => setSupersedeTimesheet(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>
+                  <span className="font-medium">Supersede the previous active timesheet</span>
+                  <span className="block text-xs">
+                    Required to import. Only one active timesheet is allowed per
+                    company and month.
+                  </span>
+                </span>
+              </label>
+            </div>
           )}
+
+          {(result?.identicalManualCount ?? 0) > 0 && (
+            <div className="rounded-md border border-border bg-paper px-3 py-2 text-sm text-text-muted">
+              {result.identicalManualCount} uploaded row
+              {result.identicalManualCount === 1 ? " is" : "s are"} identical to existing manual
+              records. On import those records are kept and re-labelled as timesheet records, not duplicated.
+            </div>
+          )}
+
+          {/* ---------- Blockers: uploads never delete anything ---------- */}
+          {removedRecords.length > 0 && (
+            <div role="alert" className="rounded-md border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+              <p className="font-semibold">
+                {removedCount} record{removedCount === 1 ? "" : "s"} in the
+                active timesheet {removedCount === 1 ? "is" : "are"} missing from this upload.
+              </p>
+              <p className="mt-1">
+                Uploads never delete existing records. Download the active
+                timesheet, merge your new data into it so these records are
+                kept, then upload the merged file.
+              </p>
+              {activeSourceUrl && (
+                <a className="btn-secondary mt-2 inline-flex" href={activeSourceUrl} download>
+                  Download active timesheet
+                </a>
+              )}
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs font-medium">View missing records</summary>
+                {removedCount > removedRecords.length && reviewCsvUrl && (
+                  <p className="mt-2 text-xs">
+                    Showing the first {removedRecords.length} of {removedCount}.{" "}
+                    <a className="underline" href={reviewCsvUrl} download>
+                      Download full list (CSV)
+                    </a>
+                  </p>
+                )}
+                <div className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-surface text-text">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-paper uppercase tracking-wide text-text-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Worker</th>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">In active timesheet</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {removedRecords.map((item, i) => (
+                        <tr key={`${item.workerId}-${item.workDate}-${i}`}>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{item.workerCode || "—"}</div>
+                            <div className="text-text-muted">{item.workerName || "—"}</div>
+                          </td>
+                          <td className="px-3 py-2">{formatDate(item.workDate)}</td>
+                          <td className="px-3 py-2">
+                            {[item.previous?.role, item.previous?.hours != null ? `${item.previous.hours} h` : null, item.previous?.status]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </div>
+          )}
+
+          {hasManualConflicts && (
+            <div role="alert" className="rounded-md border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+              <p className="font-semibold">
+                {manualConflictCount} manual record{manualConflictCount === 1 ? "" : "s"} overlap
+                this upload
+                {manualConflictCount === manualConflicts.length
+                  ? ` (${manualWorkerCount} worker${manualWorkerCount === 1 ? "" : "s"})`
+                  : ""}
+                .
+              </p>
+              <p className="mt-1">
+                Uploads never overwrite manual records. Remove these worker/date
+                rows from the file, or resolve the manual records yourself, then
+                upload again.
+              </p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs font-medium">View conflicting records</summary>
+                {manualConflictCount > manualConflicts.length && reviewCsvUrl && (
+                  <p className="mt-2 text-xs">
+                    Showing the first {manualConflicts.length} of {manualConflictCount}.{" "}
+                    <a className="underline" href={reviewCsvUrl} download>
+                      Download full list (CSV)
+                    </a>
+                  </p>
+                )}
+                <div className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-surface text-text">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-paper uppercase tracking-wide text-text-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Worker</th>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Manual</th>
+                        <th className="px-3 py-2 font-medium">Uploaded</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {manualConflicts.map((item, i) => (
+                        <tr key={`${item.workerId}-${item.workDate}-${i}`}>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{item.workerCode || "—"}</div>
+                            <div className="text-text-muted">{item.workerName || "—"}</div>
+                          </td>
+                          <td className="px-3 py-2">{formatDate(item.workDate)}</td>
+                          <td className="px-3 py-2">
+                            {item.existingRole ? `${item.existingRole} · ` : ""}
+                            {item.existingStatus || "—"}
+                            {item.existingHours != null ? ` · ${item.existingHours} h` : ""}
+                          </td>
+                          <td className="px-3 py-2">
+                            {item.uploadedRole ? `${item.uploadedRole} · ` : ""}
+                            {item.uploadedStatus || "—"}
+                            {item.uploadedHours != null ? ` · ${item.uploadedHours} h` : ""}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </div>
+          )}
+
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
           {result?.preview?.length > 0 ? (
             <div className="max-h-72 overflow-auto rounded-md border border-border">
@@ -389,214 +567,42 @@ export default function UploadModal({ companies, onClose, onDone }) {
                     <th className="px-3 py-2 font-medium">Status</th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-border">
                   {result.preview.map((record, index) => (
-                    <tr
-                      key={`${record.workerId ?? ""}-${record.workDate ?? ""}-${index}`}
-                    >
+                    <tr key={`${record.workerId ?? ""}-${record.workDate ?? ""}-${index}`}>
                       <td className="px-3 py-2">
-                        <div className="font-medium">
-                          {record.workerId || "—"}
-                        </div>
+                        <div className="font-medium">{record.workerId || "—"}</div>
                         {record.workerName && (
-                          <div className="text-xs text-text-muted">
-                            {record.workerName}
-                          </div>
+                          <div className="text-xs text-text-muted">{record.workerName}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        {record.role || record.roleId || "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatDate(record.workDate)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {record.hours ?? "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {record.status || "—"}
-                      </td>
+                      <td className="px-3 py-2">{record.role || record.roleId || "—"}</td>
+                      <td className="px-3 py-2">{formatDate(record.workDate)}</td>
+                      <td className="px-3 py-2">{record.hours ?? "—"}</td>
+                      <td className="px-3 py-2">{record.status || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-sm text-text-muted">
-              No preview rows were returned.
-            </p>
+            <p className="text-sm text-text-muted">No preview rows were returned.</p>
           )}
 
           <div className="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onClose}
-              disabled={busy}
-            >
+            <button type="button" className="btn-secondary" onClick={handleClose} disabled={busy}>
               Cancel
             </button>
-
-            {result?.conflict ? (
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => requestConfirm(true)}
-                disabled={busy}
-              >
-                {busy ? "Importing…" : "Replace & import"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => requestConfirm(false)}
-                disabled={busy}
-              >
-                {busy ? "Importing…" : "Confirm import"}
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleConfirm}
+              disabled={!canImport}
+            >
+              {busy ? "Importing…" : hasTimesheetConflict ? "Replace & import" : "Confirm import"}
+            </button>
           </div>
         </div>
-      )}
-
-      {showManualConflictModal && (
-        <Modal
-          title="Manual work records found"
-          onClose={() => {
-            if (!busy) setShowManualConflictModal(false);
-          }}
-          wide
-        >
-          <div className="space-y-4">
-            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-              <TriangleAlert className="mt-0.5 h-6 w-6 shrink-0 text-amber-700" />
-
-              <div className="space-y-1">
-                <p className="font-semibold">
-                  This timesheet overlaps with existing manual work records.
-                </p>
-                <p className="text-sm">
-                  Superseding will delete only the manual records for the same
-                  workers and dates that are included in this uploaded
-                  timesheet. Other manual records in the month will remain
-                  unchanged.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-md border border-border">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-paper px-3 py-2 text-sm">
-                <span className="font-medium">
-                  {result?.manualConflicts?.length ?? 0} conflicting record
-                  {(result?.manualConflicts?.length ?? 0) === 1 ? "" : "s"}
-                </span>
-
-                <span className="text-text-muted">
-                  {new Set(
-                    (result?.manualConflicts ?? []).map(
-                      (item) => item.workerCode,
-                    ),
-                  ).size}{" "}
-                  affected worker
-                  {new Set(
-                    (result?.manualConflicts ?? []).map(
-                      (item) => item.workerCode,
-                    ),
-                  ).size === 1
-                    ? ""
-                    : "s"}
-                </span>
-              </div>
-
-              <div className="max-h-60 overflow-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-paper text-xs uppercase tracking-wide text-text-muted">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Worker</th>
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">
-                        Existing manual record
-                      </th>
-                      <th className="px-3 py-2 font-medium">
-                        Uploaded record
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-border">
-                    {(result?.manualConflicts ?? []).map((item, index) => (
-                      <tr
-                        key={`${item.workerId}-${item.workDate}-${index}`}
-                      >
-                        <td className="px-3 py-2">
-                          <div className="font-medium">
-                            {item.workerCode || "—"}
-                          </div>
-                          <div className="text-xs text-text-muted">
-                            {item.workerName || "—"}
-                          </div>
-                        </td>
-
-                        <td className="px-3 py-2">
-                          {formatDate(item.workDate)}
-                        </td>
-
-                        <td className="px-3 py-2">
-                          {item.existingStatus || "—"}
-                          {item.existingHours != null
-                            ? ` · ${item.existingHours} h`
-                            : ""}
-                        </td>
-
-                        <td className="px-3 py-2">
-                          {item.uploadedStatus || "—"}
-                          {item.uploadedHours != null
-                            ? ` · ${item.uploadedHours} h`
-                            : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {error && (
-              <p role="alert" className="text-sm text-danger">
-                {error}
-              </p>
-            )}
-
-            <p className="text-sm text-text-muted">
-              This action cannot be undone. Do you want to supersede these
-              manual records?
-            </p>
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-md border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() =>
-                  handleConfirm(result?.conflict ? true : false, true)
-                }
-                disabled={busy}
-              >
-                {busy ? "Importing…" : "Supersede"}
-              </button>
-
-              <button
-                type="button"
-                className="btn-secondary border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                onClick={() => setShowManualConflictModal(false)}
-                disabled={busy}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </Modal>
       )}
     </Modal>
   );

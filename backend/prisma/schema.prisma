@@ -103,6 +103,10 @@ model TimesheetUpload {
   company          Company         @relation(fields: [companyId], references: [id])
   uploadedBy       User            @relation("TimesheetUploadedBy", fields: [uploadedById], references: [id])
   workRecords      WorkRecord[]
+  supersededById   String?    
+  recordsCreated   Int?       
+  recordsConverted Int?      
+  confirmedAt      DateTime?
 
   @@index([companyId, periodMonth])
   @@map("timesheet_uploads")
@@ -174,6 +178,8 @@ enum TimesheetStatus {
   ACTIVE
   SUPERSEDED
   FAILED
+  CANCELLED
+  NO_CHANGES
 }
 
 enum WorkStatus {

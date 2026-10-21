@@ -5,6 +5,8 @@ import { ApiError } from "../utils/ApiError.js";
 import {
   uploadTimesheet,
   uploadBodySchema,
+  cancelTimesheet,
+  downloadDiff,
   confirmTimesheet,
   confirmBodySchema,
   listTimesheets,
@@ -38,5 +40,7 @@ router.get("/timesheets/:id", getTimesheet);
 router.get("/timesheets/:id/source", downloadSource);
 router.post("/timesheets/upload", upload.single("file"), validate({ body: uploadBodySchema }), uploadTimesheet);
 router.post("/timesheets/:id/confirm", validate({ body: confirmBodySchema }), confirmTimesheet);
+router.post("/timesheets/:id/cancel", cancelTimesheet);   // new
+router.get("/timesheets/:id/diff.csv", downloadDiff); 
 
 export default router;

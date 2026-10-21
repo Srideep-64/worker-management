@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { LogOut, Menu, Moon, Sun} from "lucide-react";
 import { useTheme } from "../../context/ThemeContext.jsx";
+import Modal from "../ui/Modal.jsx";
 
 import { useAuth } from "../../context/AuthContext.jsx";
 
@@ -24,6 +26,7 @@ export default function Topbar({ onMenuClick }) {
   const { theme, toggleTheme } = useTheme();
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const initials = (user?.name || "?")
     .split(" ")
@@ -81,7 +84,7 @@ export default function Topbar({ onMenuClick }) {
 
         <button
           type="button"
-          onClick={logout}
+          onClick={() => setShowLogoutModal(true)}
           className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-paper hover:text-text"
           title="Log out"
           aria-label="Log out"
@@ -89,6 +92,34 @@ export default function Topbar({ onMenuClick }) {
           <LogOut className="h-4 w-4" strokeWidth={1.75} />
         </button>
       </div>
+      {showLogoutModal && (
+  <Modal
+    title="Confirm logout"
+    onClose={() => setShowLogoutModal(false)}
+  >
+    <p className="text-sm text-text-muted">
+      Are you sure you want to log out of your account?
+    </p>
+
+    <div className="mt-6 flex justify-end gap-3">
+      <button
+        type="button"
+        onClick={() => setShowLogoutModal(false)}
+        className="rounded-md border border-border px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-paper"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={logout}
+        className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+      >
+        Log out
+      </button>
+    </div>
+  </Modal>
+)}
     </header>
   );
 }
