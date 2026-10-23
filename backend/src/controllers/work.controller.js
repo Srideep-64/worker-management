@@ -28,7 +28,7 @@ export const getWorkerWork = asyncHandler(async (req, res) => {
 });
 
 export const createManualWorkBatch = asyncHandler(async (req, res) => {
-  const result = await WorkService.createManualWorkBatch(req.params.id, req.body.records);
+  const result = await WorkService.createManualWorkBatch(req.params.id, req.body.records,req.user,);
   res.status(200).json(result);
 });
 

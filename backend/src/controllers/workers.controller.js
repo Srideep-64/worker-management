@@ -10,6 +10,42 @@ import {
   monthRange,
 } from "../utils/dates.js";
 import { getWorkerStatus,getWorkerStatusForMonth } from "../utils/workerStatus.js";
+import { logActivity } from "../lib/activityLog.js";
+
+const WORKER_FIELDS = {
+  name: "name", companyId: "company", passportNumber: "passport number",
+  passportExpiry: "passport expiry", nationality: "nationality",
+  dateOfBirth: "date of birth", phone: "phone", visaNumber: "visa number",
+  visaExpiry: "visa expiry", emiratesIdNumber: "Emirates ID number",
+  emiratesIdExpiry: "Emirates ID expiry", labourCardNumber: "labour card number",
+  jobTitle: "job title", joiningDate: "joining date", leavingDate: "leaving date",
+};
+const HIDE_VALUES = new Set([
+  "passportNumber", "visaNumber", "emiratesIdNumber", "labourCardNumber",
+  "phone", "dateOfBirth", "companyId",
+]);
+
+const norm = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : (v ?? null));
+
+function diffWorker(before, data) {
+  const changes = [];
+  for (const key of Object.keys(WORKER_FIELDS)) {
+    if (data[key] === undefined) continue;
+    const from = norm(before[key]);
+    const to = norm(data[key]);
+    if (from !== to) changes.push({ key, from, to });
+  }
+  return changes;
+}
+
+function describeChanges(changes) {
+  return changes
+    .map(({ key, from, to }) =>
+      HIDE_VALUES.has(key)
+        ? `${WORKER_FIELDS[key]} updated`
+        : `${WORKER_FIELDS[key]} ${from ?? "empty"} → ${to ?? "empty"}`)
+    .join("; ");
+}
 
 function withWorkerStatus(worker) {
   return {
@@ -228,6 +264,18 @@ export const createWorker = asyncHandler(async (req, res) => {
     },
   });
 
+    await logActivity({
+    user: req.user,
+    category: "WORKERS",
+    action: "CREATE",
+    description: `Created worker ${worker.workerCode} (${worker.name}) at ${worker.company.name}`,
+    workerId: worker.id,
+    workerCode: worker.workerCode,
+    companyId: worker.companyId,
+    entityType: "Worker",
+    entityId: worker.id,
+  });
+
   res.status(201).json({
     worker: withWorkerStatus(worker),
   });
@@ -239,7 +287,6 @@ export const updateWorker = asyncHandler(async (req, res) => {
 
   const existingWorker = await prisma.worker.findUnique({
     where: { id: req.params.id },
-    select: { id: true },
   });
 
   if (!existingWorker) {
@@ -279,6 +326,25 @@ export const updateWorker = asyncHandler(async (req, res) => {
       company: true,
     },
   });
+
+    const changes = diffWorker(existingWorker, data);
+  if (changes.length > 0) {
+    await logActivity({
+      user: req.user,
+      category: "WORKERS",
+      action: "UPDATE",
+      description: `Updated worker ${worker.workerCode} (${worker.name}) — ${describeChanges(changes)}`,
+      workerId: worker.id,
+      workerCode: worker.workerCode,
+      companyId: worker.companyId,
+      entityType: "Worker",
+      entityId: worker.id,
+      metadata: {
+        changes: changes.map(({ key, from, to }) =>
+          HIDE_VALUES.has(key) ? { field: key } : { field: key, from, to }),
+      },
+    });
+  }
 
   res.json({
     worker: withWorkerStatus(worker),

@@ -10,7 +10,7 @@ export async function getUsers(req, res, next) {
         createdAt: true,
       },
       orderBy: {
-        createdAt: "desc",
+        createdAt: "asc",
       },
     });
 

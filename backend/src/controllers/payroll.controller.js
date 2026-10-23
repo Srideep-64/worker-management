@@ -9,6 +9,9 @@ import {
   monthRange,
   monthStartDate,
 } from "../utils/dates.js";
+import { logActivity, monthLabel } from "../lib/activityLog.js";
+
+const WORKER_LOG_SELECT = { id: true, workerCode: true, name: true, companyId: true };
 
 export const payrollMonthSchema = z.object({
   month: monthSchema,
@@ -138,7 +141,7 @@ export const getWorkerPayroll = asyncHandler(async (req, res) => {
 export const updateHourlyRate = asyncHandler(async (req, res) => {
   const worker = await prisma.worker.findUnique({
     where: { id: req.params.id },
-    select: { id: true },
+    select: WORKER_LOG_SELECT,
   });
 
   if (!worker) {
@@ -149,6 +152,11 @@ export const updateHourlyRate = asyncHandler(async (req, res) => {
   updateHourlyRateSchema.parse(req.body);
 
   const payrollMonth = monthStartDate(month);
+
+  const previous = await prisma.workerPayroll.findUnique({
+    where: { workerId_payrollMonth: { workerId: worker.id, payrollMonth } },
+    select: { hourlyRate: true },
+  });
 
   const updated = await prisma.workerPayroll.upsert({
     where: {
@@ -170,9 +178,29 @@ export const updateHourlyRate = asyncHandler(async (req, res) => {
     },
   });
 
+  const oldRate = previous ? Number(previous.hourlyRate) : null;
+  const newRate = Number(updated.hourlyRate);
+
+  if (oldRate !== newRate) {
+    await logActivity({
+      user: req.user,
+      category: "PAYROLL",
+      action: oldRate == null ? "CREATE" : "UPDATE",
+      description:
+        oldRate == null
+          ? `Set hourly rate for worker ${worker.workerCode} for ${monthLabel(month)} to AED ${newRate.toFixed(2)}`
+          : `Changed hourly rate for worker ${worker.workerCode} for ${monthLabel(month)} from AED ${oldRate.toFixed(2)} to AED ${newRate.toFixed(2)}`,
+      workerId: worker.id,
+      workerCode: worker.workerCode,
+      companyId: worker.companyId,
+      entityType: "WorkerPayroll",
+      metadata: { workerName: worker.name, month, from: oldRate, to: newRate },
+    });
+  }
+
   res.json({
     month,
-    hourlyRate: Number(updated.hourlyRate),
+    hourlyRate:newRate,
   });
 });
 
@@ -180,7 +208,7 @@ export const updateHourlyRate = asyncHandler(async (req, res) => {
 export const createAdvance = asyncHandler(async (req, res) => {
   const worker = await prisma.worker.findUnique({
     where: { id: req.params.id },
-    select: { id: true },
+    select: WORKER_LOG_SELECT,
   });
 
   if (!worker) {
@@ -210,6 +238,19 @@ export const createAdvance = asyncHandler(async (req, res) => {
     },
   });
 
+    await logActivity({
+    user: req.user,
+    category: "PAYROLL",
+    action: "CREATE",
+    description: `Recorded advance payment of AED ${Number(advance.amount).toFixed(2)} for worker ${worker.workerCode} for ${monthLabel(payrollMonth)}`,
+    workerId: worker.id,
+    workerCode: worker.workerCode,
+    companyId: worker.companyId,
+    entityType: "AdvancePayment",
+    entityId: advance.id,
+    metadata: { workerName: worker.name, month: payrollMonth, amount: Number(advance.amount) },
+  });
+
   res.status(201).json({
     advance: {
       id: advance.id,
@@ -223,16 +264,33 @@ export const createAdvance = asyncHandler(async (req, res) => {
 
 // DELETE /api/workers/:id/advances/:advanceId
 export const deleteAdvance = asyncHandler(async (req, res) => {
-  const result = await prisma.advancePayment.deleteMany({
-    where: {
-      id: req.params.advanceId,
-      workerId: req.params.id,
-    },
+  const advance = await prisma.advancePayment.findFirst({
+    where: { id: req.params.advanceId, workerId: req.params.id },
+    include: { worker: { select: WORKER_LOG_SELECT } },
   });
 
-  if (result.count === 0) {
-    throw ApiError.notFound("Advance payment not found");
-  }
+  if (!advance) throw ApiError.notFound("Advance payment not found");
+
+  const result = await prisma.advancePayment.deleteMany({
+    where: { id: advance.id, workerId: advance.workerId },
+  });
+
+  if (result.count === 0) throw ApiError.notFound("Advance payment not found");
+
+  const month = advance.payrollMonth.toISOString().slice(0, 7);
+
+  await logActivity({
+    user: req.user,
+    category: "PAYROLL",
+    action: "DELETE",
+    description: `Deleted advance payment of AED ${Number(advance.amount).toFixed(2)} for worker ${advance.worker.workerCode} for ${monthLabel(month)}`,
+    workerId: advance.worker.id,
+    workerCode: advance.worker.workerCode,
+    companyId: advance.worker.companyId,
+    entityType: "AdvancePayment",
+    entityId: advance.id,
+    metadata: { workerName: advance.worker.name, month, amount: Number(advance.amount) },
+  });
 
   res.json({ message: "Advance payment deleted" });
 });

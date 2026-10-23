@@ -4,6 +4,12 @@ import { saveFile, readFile, deleteFile } from "../lib/storage.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getWorkerStatus } from "../utils/workerStatus.js";
+import { logActivity } from "../lib/activityLog.js";
+
+const DOCUMENT_LABELS = {
+  PHOTO: "photo", PASSPORT: "passport", VISA: "visa",
+  EMIRATES_ID: "Emirates ID", LABOUR_CARD: "labour card",
+};
 
 export const DOCUMENT_TYPES = ["PHOTO", "PASSPORT", "VISA", "EMIRATES_ID", "LABOUR_CARD"];
 
@@ -40,7 +46,7 @@ const PUBLIC_FIELDS = {
 async function requireWorker(id) {
   const worker = await prisma.worker.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, workerCode: true, name: true, companyId: true },
   });
 
   if (!worker) throw ApiError.notFound("Worker not found");
@@ -60,7 +66,7 @@ export const listDocuments = asyncHandler(async (req, res) => {
 // PUT = create-or-replace: v1 keeps exactly one current document per type.
 export const putDocument = asyncHandler(async (req, res) => {
   const { id: workerId, type } = req.params;
-  await requireWorker(workerId);
+  const worker = await requireWorker(workerId);
   if (!req.file) throw ApiError.badRequest("A file is required (field name 'file')");
 
   const mimeType = sniffMime(req.file.buffer);
@@ -100,6 +106,19 @@ export const putDocument = asyncHandler(async (req, res) => {
 
   // Remove the superseded file only after the DB points at the new one.
   if (existing) await deleteFile(existing.storageKey).catch(() => {});
+
+    await logActivity({
+    user: req.user,
+    category: "DOCUMENTS",
+    action: existing ? "REPLACE" : "UPLOAD",
+    description: `${existing ? "Replaced" : "Uploaded"} ${DOCUMENT_LABELS[type]} document for worker ${worker.workerCode} (${worker.name})`,
+    workerId: worker.id,
+    workerCode: worker.workerCode,
+    companyId: worker.companyId,
+    entityType: "Document",
+    entityId: document.id,
+    metadata: { type, filename: document.originalFilename, fileSize: document.fileSize },
+  });
 
   res.status(existing ? 200 : 201).json({ document });
 });

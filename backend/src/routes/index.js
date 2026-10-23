@@ -7,6 +7,7 @@ import rolesRoutes from "./roles.routes.js";
 import timesheetsRoutes from "./timesheets.routes.js";
 import documentsRoutes from "./documents.routes.js";
 import dashboardRoutes from "./dashboard.routes.js"
+import logsRoutes from "./logs.routes.js"
 const router = Router();
 
 // authRoutes contains the one public endpoint (POST /auth/login) plus
@@ -22,5 +23,6 @@ router.use(workersRoutes);
 router.use(rolesRoutes);
 router.use(timesheetsRoutes);
 router.use(documentsRoutes);
+router.use("/logs",logsRoutes)
 
 export default router;

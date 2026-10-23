@@ -8,6 +8,7 @@ import {
   monthRange,
   dateOnly,
 } from "../utils/dates.js";
+import { logActivity } from "../lib/activityLog.js";
 
 export const listCompanies = asyncHandler(async (req, res) => {
   // Use the current month in the UAE timezone.
@@ -82,6 +83,15 @@ export const createCompany = asyncHandler(async (req, res) => {
 
   const company = await prisma.company.create({
     data: parsed.data,
+  });
+    await logActivity({
+    user: req.user,
+    category: "COMPANIES",
+    action: "CREATE",
+    description: `Created company ${company.name} (${company.code})`,
+    companyId: company.id,
+    entityType: "Company",
+    entityId: company.id,
   });
 
   res.status(201).json({ company });

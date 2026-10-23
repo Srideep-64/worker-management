@@ -12,6 +12,7 @@ import WorkerProfile from "./pages/WorkerProfile.jsx";
 import Timesheets from "./pages/Timesheets.jsx";
 import Documents from "./pages/Documents.jsx";
 import Settings from "./pages/Settings.jsx";
+import Logs from "./pages/Logs.jsx";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
             />
             <Route path="/timesheets" element={<Timesheets />} />
             <Route path="/documents" element={<Documents />} />
+            <Route path="/logs" element={<Logs />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>

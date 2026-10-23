@@ -53,6 +53,7 @@ let version = 0;         // bumped on every invalidate
 // First matching rule wins; anything unmatched uses DEFAULT_TTL.
 const TTL_RULES = [
   [/^\/(me|auth)/, 0],                             // never cache the session
+  [/^\/logs$|^\/logs\?/, 0],   // always fresh; /logs/users uses the default TTL
   [/^\/roles/, Infinity],                          // session-long
   [/\/(work|payroll|stats|dashboard)(\/|\?|$)/, 60_000],     // 1 min
 ];

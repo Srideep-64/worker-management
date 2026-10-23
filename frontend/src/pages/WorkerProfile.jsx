@@ -258,7 +258,7 @@ export default function WorkerProfile() {
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);
-            invalidate("/workers", "/companies", "/dashboard","documents");
+            invalidate("/workers", "/dashboard",);
             reload();
           }}
         />
@@ -270,7 +270,7 @@ export default function WorkerProfile() {
             onClose={() => setChangingStatus(false)}
             onSaved={() => {
               setChangingStatus(false);
-              invalidate("/workers", "/companies", "/dashboard","/documents");
+              invalidate("/workers", "/dashboard","/documents");
               reload();
             }}
           />

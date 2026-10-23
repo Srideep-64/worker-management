@@ -160,6 +160,38 @@ model WorkerPayroll {
   @@map("worker_payrolls")
 }
 
+model ActivityLog {
+  id          String           @id @default(uuid())
+  userId      String?          @map("user_id")
+  username    String
+  category    ActivityCategory
+  action      String
+  description String
+  workerId    String?          @map("worker_id")
+  workerCode  String?          @map("worker_code")
+  companyId   String?          @map("company_id")
+  entityType  String?          @map("entity_type")
+  entityId    String?          @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([category, createdAt])
+  @@index([userId, createdAt])
+  @@index([workerId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("activity_logs")
+}
+
+enum ActivityCategory {
+  WORKERS
+  WORK_RECORDS
+  TIMESHEETS
+  PAYROLL
+  DOCUMENTS
+  COMPANIES
+}
+
 enum WorkRecordSource {
   TIMESHEET
   MANUAL

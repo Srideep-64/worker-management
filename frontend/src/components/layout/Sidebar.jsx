@@ -6,13 +6,16 @@ import {
   FolderLock,
   Settings as SettingsIcon,
   X,
+  History,
 } from "lucide-react";
+
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/workers", label: "Workers", icon: Users },
   { to: "/timesheets", label: "Timesheets", icon: FileSpreadsheet },
   { to: "/documents", label: "Documents", icon: FolderLock },
+  { to: "/logs", label: "Logs", icon: History },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

@@ -5,6 +5,7 @@ import { saveFile, readFile } from "../lib/storage.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { parseAndValidateWorkbook } from "../utils/timesheetParser.js";
+import { logActivity, monthLabel } from "../lib/activityLog.js";
 import {
   currentUaeMonthString,
   monthRange,
@@ -518,6 +519,7 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
 
   const upload = await prisma.timesheetUpload.findUnique({
     where: { id: req.params.id },
+    include: { company: { select: { id: true, code: true, name: true } } },
   });
   if (!upload) throw ApiError.notFound("Timesheet upload not found");
   if (upload.status !== "PROCESSING") {
@@ -656,6 +658,7 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
           created: recordsToInsert.length,
           converted: overlap.identicalIds.length,
           supersededUploadId: existingActive?.id ?? null,
+          changeSummary:summarizeChanges(changes),
         };
       },
       { maxWait: 10000, timeout: 30000 },
@@ -677,7 +680,33 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
     });
     throw ApiError.conflict("The timesheet does not update any data.");
   }
+    const cs = outcome.changeSummary;
+  const detail = outcome.supersededUploadId
+    ? `${cs.added} added, ${cs.changed} changed, ${Math.max(0, records.length - cs.added - cs.changed)} unchanged`
+    : `${outcome.created} records created`;
 
+  await logActivity({
+    user: req.user,
+    category: "TIMESHEETS",
+    action: outcome.supersededUploadId ? "REPLACE" : "UPLOAD",
+    description:
+      `Uploaded timesheet "${upload.originalFilename}" for ${upload.company.name} for ${monthLabel(periodMonth)}` +
+      (outcome.supersededUploadId ? ", replacing the previous timesheet" : "") +
+      `. ${detail}` +
+      (outcome.converted ? `, ${outcome.converted} manual records converted.` : "."),
+    companyId: upload.companyId,
+    entityType: "TimesheetUpload",
+    entityId: upload.id,
+    metadata: {
+      month: periodMonth,
+      filename: upload.originalFilename,
+      rowCount: records.length,
+      created: outcome.created,
+      converted: outcome.converted,
+      supersededUploadId: outcome.supersededUploadId,
+      ...cs,
+    },
+  });
   res.json({
     upload: outcome.activated,
     workRecordsCreated: outcome.created,
