@@ -98,7 +98,8 @@ export default function Logs() {
 
       <div className="mb-5 flex flex-wrap gap-3">
         <input
-          className="input w-auto"
+          className="input serach-input"
+          size={42}
           placeholder="Search worker name, code, admin or description"
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}

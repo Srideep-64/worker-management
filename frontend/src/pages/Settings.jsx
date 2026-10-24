@@ -84,7 +84,7 @@ export default function Settings() {
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-text-muted">
                     <th className="pb-2 font-medium">Name</th>
-                    <th className="pb-2 font-medium">Email</th>
+                    
                     <th className="pb-2 font-medium">Role</th>
                   </tr>
                 </thead>
@@ -95,11 +95,11 @@ export default function Settings() {
                       <td className="py-2.5 font-medium text-text">
                         {item.name}
                       </td>
-                      <td className="py-2.5 text-text-muted">
-                        {item.email}
-                      </td>
+                      
                       <td className="py-2.5">
-                        <Badge tone="neutral">Admin</Badge>
+                        <Badge tone="neutral">
+                        {item.name === "Super Admin" ? "Super Admin" : "Admin"}
+                      </Badge>
                       </td>
                     </tr>
                   ))}
