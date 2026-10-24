@@ -21,7 +21,6 @@ export const createManualWorkBatchSchema = z.object({
 });
 
 /* Controllers */
-
 export const getWorkerWork = asyncHandler(async (req, res) => {
   const result = await WorkService.getWorkerWork(req.params.id, req.query.month);
   res.json(result);

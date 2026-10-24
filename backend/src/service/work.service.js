@@ -18,6 +18,7 @@ import {
   summarize,
 } from "../utils/workRecord.js";
 import { logActivity, monthLabel } from "../lib/activityLog.js";
+import { lockCompanyMonth } from "../utils/locks.js";
 
 /* Service Class */
 export class WorkService {
@@ -106,6 +107,8 @@ export class WorkService {
         if (!worker) {
           throw ApiError.notFound("Worker not found.");
         }
+
+        await lockCompanyMonth(tx, worker.companyId, month, "shared");
 
         await assertNoActiveTimesheet(
           worker.companyId,

@@ -12,6 +12,7 @@ import {
   periodMonthToDate,
   monthSchema,
 } from "../utils/dates.js";
+import { lockCompanyMonth } from "../utils/locks.js";
 
 // Lists sent to the browser are capped; the full list is available as CSV.
 const PREVIEW_LIST_LIMIT = 200;
@@ -552,6 +553,7 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
   try {
     outcome = await prisma.$transaction(
       async (tx) => {
+        await lockCompanyMonth(tx, upload.companyId, periodMonth, "exclusive");
         // Claim the upload. The no-op UPDATE takes the row lock, so a second
         // confirm (double click, other tab) waits, then finds it processed.
         const claimed = await tx.timesheetUpload.updateMany({
@@ -666,6 +668,12 @@ export const confirmTimesheet = asyncHandler(async (req, res) => {
   } catch (err) {
     // Unique-index violation: another upload became ACTIVE first.
     if (err?.code === "P2002") {
+      const target = JSON.stringify(err.meta?.target ?? "");
+      if (target.includes("work_date") || target.includes("workDate")) {
+        throw ApiError.conflict(
+          "A work record was added for one of these workers and dates while you were confirming. Upload the file again to review the latest data.",
+        );
+      }
       throw ApiError.conflict(
         "Another timesheet was activated for this company and month while you were confirming. Upload the file again to review the latest data.",
       );
