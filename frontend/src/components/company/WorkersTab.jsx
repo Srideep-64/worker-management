@@ -139,13 +139,13 @@ return (
                 <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Job title</th>
-                <th className="px-3 py-2 font-medium">Work hours</th>
-                <th className="px-3 py-2 font-medium">Absent days</th>
+                <th className="px-3 py-2 font-medium">Work hrs</th>
+                <th className="px-3 py-2 font-medium">Absents</th>
               </tr>
             </thead>
 
             <tbody>
-              {workers.map((worker,index) => {
+              {workers.map((worker) => {
                 const stats = hoursByWorker.get(worker.id);
                 const unavailable = stats?.failed;
 
@@ -154,8 +154,8 @@ return (
                     key={worker.id}
                     className="border-b border-border last:border-0"
                   >  
-                    <td className="px-3 py-2.5 text-text">
-                      {(page - 1) * PAGE_SIZE + index+1}
+                    <td className="px-3 py-2.5 font-medium text-text">
+                      {worker.workerCode?.match(/\d+$/)?.[0] ?? "—"}
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       <Link

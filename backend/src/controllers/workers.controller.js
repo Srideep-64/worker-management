@@ -125,7 +125,6 @@ export const listWorkers = asyncHandler(async (req, res) => {
     prisma.worker.findMany({
       where,
       orderBy: [
-        { name: "asc" },
         { workerCode: "asc" },
       ],
       skip,
