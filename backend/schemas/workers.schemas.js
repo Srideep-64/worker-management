@@ -1,3 +1,4 @@
+
 import { z } from "zod";
 
 const dateString = z.coerce.date();
@@ -25,15 +26,8 @@ export const listWorkersQuerySchema = z.object({
 }));
 
 export const createWorkerSchema = z.object({
-  workerCode: z
-    .string()
-    .trim()
-    .regex(
-      /^[A-Z]{2,4}\d{3,6}$/,
-      "Worker code must contain 2–4 uppercase letters followed by 3–6 digits",
-    ),
-
   companyId: z.string().uuid(),
+
   name: z.string().trim().min(1).max(200),
 
   passportNumber: z.string().trim().max(50).optional(),
@@ -58,7 +52,6 @@ export const createWorkerSchema = z.object({
 export const updateWorkerSchema = createWorkerSchema
   .omit({
     companyId: true,
-    workerCode: true,
   })
   .partial()
   .extend({

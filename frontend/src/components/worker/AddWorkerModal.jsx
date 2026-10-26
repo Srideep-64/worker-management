@@ -1,23 +1,28 @@
+
 import { useState } from "react";
 
 import Modal from "../ui/Modal.jsx";
 import { api, ApiError } from "../../api/client.js";
 
 const INITIAL_FORM = {
-  workerCode: "",
   companyId: "",
   name: "",
   nationality: "",
   phone: "",
   jobTitle: "",
-  joiningDate: "",
+  joiningDate: "2026-01-01",
 };
 
-export default function AddWorkerModal({ companies, onClose, onSaved }) {
+export default function AddWorkerModal({
+  companies,
+  onClose,
+  onSaved,
+}) {
   const [form, setForm] = useState({
     ...INITIAL_FORM,
     companyId: companies[0]?.id ?? "",
   });
+
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -33,16 +38,18 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
     setError("");
 
     const payload = {
-      workerCode: form.workerCode.trim().toUpperCase(),
       companyId: form.companyId,
       name: form.name.trim(),
       joiningDate: form.joiningDate,
+
       ...(form.nationality.trim() && {
         nationality: form.nationality.trim(),
       }),
+
       ...(form.phone.trim() && {
         phone: form.phone.trim(),
       }),
+
       ...(form.jobTitle.trim() && {
         jobTitle: form.jobTitle.trim(),
       }),
@@ -73,28 +80,10 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="worker-code" className="label">
-              Worker ID *
-            </label>
-            <input
-              id="worker-code"
-              className="input"
-              value={form.workerCode}
-              onChange={(event) =>
-                updateField("workerCode", event.target.value.toUpperCase())
-              }
-              placeholder="AB12345"
-              pattern="[A-Z]{2,4}[0-9]{3,6}"
-              title="Use 2–4 uppercase letters followed by 3–6 digits"
-              maxLength={10}
-              required
-            />
-          </div>
-
-          <div>
             <label htmlFor="worker-company" className="label">
               Company *
             </label>
+
             <select
               id="worker-company"
               className="input"
@@ -105,6 +94,7 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
               required
             >
               <option value="">Select a company</option>
+
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
                   {company.code} — {company.name}
@@ -117,11 +107,14 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
             <label htmlFor="worker-name" className="label">
               Full name *
             </label>
+
             <input
               id="worker-name"
               className="input"
               value={form.name}
-              onChange={(event) => updateField("name", event.target.value)}
+              onChange={(event) =>
+                updateField("name", event.target.value)
+              }
               maxLength={200}
               autoComplete="name"
               required
@@ -132,6 +125,7 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
             <label htmlFor="worker-nationality" className="label">
               Nationality
             </label>
+
             <input
               id="worker-nationality"
               className="input"
@@ -146,12 +140,15 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
             <label htmlFor="worker-phone" className="label">
               Phone
             </label>
+
             <input
               id="worker-phone"
               className="input"
               type="tel"
               value={form.phone}
-              onChange={(event) => updateField("phone", event.target.value)}
+              onChange={(event) =>
+                updateField("phone", event.target.value)
+              }
               autoComplete="tel"
             />
           </div>
@@ -160,6 +157,7 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
             <label htmlFor="worker-job-title" className="label">
               Job title
             </label>
+
             <input
               id="worker-job-title"
               className="input"
@@ -175,6 +173,7 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
             <label htmlFor="worker-joining-date" className="label">
               Joining date *
             </label>
+
             <input
               id="worker-joining-date"
               className="input"
@@ -189,8 +188,9 @@ export default function AddWorkerModal({ companies, onClose, onSaved }) {
         </div>
 
         <p className="text-xs text-text-muted">
-          Passport, visa, Emirates ID, and uploaded documents can be managed
-          from the worker profile.
+          Worker ID will be automatically assigned by the system.
+          Passport, visa, Emirates ID, and uploaded documents
+          can be managed from the worker profile.
         </p>
 
         {error && (

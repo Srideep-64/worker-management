@@ -244,27 +244,97 @@ export const getWorker = asyncHandler(async (req, res) => {
   });
 });
 
-
-export const createWorker = asyncHandler(async (req, res) => {
-  const data = createWorkerSchema.parse(req.body);
-
-  const company = await prisma.company.findUnique({
-    where: { id: data.companyId },
-    select: { id: true },
+async function generateWorkerCode(tx, companyId) {
+  const company = await tx.company.findUnique({
+    where: {
+      id: companyId,
+    },
+    select: {
+      id: true,
+      code: true,
+    },
   });
 
   if (!company) {
     throw new ApiError(404, "Company not found");
   }
 
-  const worker = await prisma.worker.create({
-    data,
-    include: {
-      company: true,
+  const workers = await tx.worker.findMany({
+    where: {
+      companyId: company.id,
+    },
+    select: {
+      workerCode: true,
     },
   });
 
-    await logActivity({
+  let maxNumber = 0;
+
+  for (const worker of workers) {
+    const match = worker.workerCode.match(
+      /^([A-Z]{2,4})(\d{3,6})$/,
+    );
+
+    if (!match) {
+      continue;
+    }
+
+    const [, prefix, number] = match;
+
+    // Only consider IDs belonging to this company.
+    if (prefix !== company.code) {
+      continue;
+    }
+
+    maxNumber = Math.max(maxNumber, Number(number));
+  }
+
+  const nextNumber = String(maxNumber + 1).padStart(3, "0");
+
+  const workerCode = `${company.code}${nextNumber}`;
+
+  return {
+    company,
+    workerCode,
+  };
+}
+
+export const createWorker = asyncHandler(async (req, res) => {
+  const data = createWorkerSchema.parse(req.body);
+
+  const worker = await prisma.$transaction(async (tx) => {
+    // Serialize worker ID generation for the same company.
+    // Different companies can still create workers independently.
+    
+    await tx.$queryRaw`
+      WITH lock_result AS (
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${data.companyId}, 0)
+        )
+      )
+      SELECT 1 AS locked
+    `;
+
+
+    const { company, workerCode } = await generateWorkerCode(
+      tx,
+      data.companyId,
+    );
+
+    const createdWorker = await tx.worker.create({
+      data: {
+        ...data,
+        workerCode,
+      },
+      include: {
+        company: true,
+      },
+    });
+
+    return createdWorker;
+  });
+
+  await logActivity({
     user: req.user,
     category: "WORKERS",
     action: "CREATE",
@@ -280,7 +350,6 @@ export const createWorker = asyncHandler(async (req, res) => {
     worker: withWorkerStatus(worker),
   });
 });
-
 
 export const updateWorker = asyncHandler(async (req, res) => {
   const data = updateWorkerSchema.parse(req.body);

@@ -567,20 +567,33 @@ async function confirmUpload() {
     },
   );
 
-  async function handleRefresh() {
-      if (refreshing) return;
+async function handleRefresh() {
+  if (refreshing || saving) return;
 
-      setRefreshing(true);
+  if (pendingCount > 0) {
+    const discard = window.confirm(
+      `You have ${pendingCount} pending attendance record(s) for ${month}. ` +
+      "Refreshing will discard them. Continue?",
+    );
 
-      invalidateRelatedCaches();
+    if (!discard) return;
 
-      try {
-        await reload();
-        onWorkUpdated?.();
-      } finally {
-        setRefreshing(false);
-      }
-    }
+    setDrafts({});
+    setShowUploadConfirm(false);
+    clearPendingEntry();
+  }
+
+  setRefreshing(true);
+
+  invalidateRelatedCaches();
+
+  try {
+    await reload();
+    onWorkUpdated?.();
+  } finally {
+    setRefreshing(false);
+  }
+}
 
   return (
     <div className="space-y-5">
