@@ -148,7 +148,7 @@ return (
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-                <th className="px-3 py-2 font-medium"></th>
+                <th className="sticky left-0 z-20 bg-surface px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Job title</th>
                 <th className="px-3 py-2 font-medium">Work hrs (ABS)</th>
@@ -167,7 +167,7 @@ return (
                     key={worker.id}
                     className="border-b border-border last:border-0"
                   >  
-                    <td className="px-3 py-2.5 font-medium text-text">
+                    <td className="sticky left-0 z-10 bg-surface px-3 py-2.5 font-medium text-text border-r border-border">
                       {worker.workerCode?.match(/\d+$/)?.[0] ?? "—"}
                     </td>
                     <td className="px-3 py-2.5 font-medium">
