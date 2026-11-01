@@ -209,8 +209,10 @@ const rateByWorker = new Map(
   }
 
 const workers = pageWorkers.map((worker) => {
-  const totalHours =
-    attendanceByWorker.get(worker.id)?.totalHours ?? 0;
+  const attendance = attendanceByWorker.get(worker.id);
+
+  const totalHours = attendance?.totalHours ?? 0;
+  const absentDays = attendance?.absentDays ?? 0;
 
   const hourlyRate = rateByWorker.get(worker.id) ?? null;
 
@@ -223,6 +225,7 @@ const workers = pageWorkers.map((worker) => {
     ...worker,
     status: getWorkerStatusForMonth(worker, reportingMonth),
     totalHours,
+    absentDays,
     hourlyRate,
     grossPay,
   };

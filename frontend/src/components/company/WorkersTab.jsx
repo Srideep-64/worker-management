@@ -11,7 +11,10 @@ function formatAED(value) {
     currency: "AED",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value);
+  })
+    .format(value)
+    .replace(/\bAED\b\s*/g, "")
+    .trim();
 }
 export default function WorkersTab({
   workers,
@@ -34,6 +37,7 @@ const hoursByWorker = new Map(
     worker.id,
     {
       totalHours: worker.totalHours ?? 0,
+      absentDays: worker.absentDays ?? 0,
       hourlyRate: worker.hourlyRate ?? null,
       grossPay: worker.grossPay ?? null,
     },
@@ -147,7 +151,7 @@ return (
                 <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Job title</th>
-                <th className="px-3 py-2 font-medium">Work hrs</th>
+                <th className="px-3 py-2 font-medium">Work hrs (ABS)</th>
                 <th className="px-3 py-2 font-medium">Pay/hr</th>
                 <th className="px-3 py-2 font-medium">Gross Pay</th>
               </tr>
@@ -189,7 +193,16 @@ return (
                     </td>
 
                     <td className="px-3 py-2.5 tabular-nums text-text-muted">
-                    {loading ? "..." : `${stats?.totalHours ?? 0} h`}
+                    {loading ? (
+                      "..."
+                    ) : (
+                      <>
+                        {stats?.totalHours ?? 0} h{" "}
+                        <span className="text-text-muted">
+                          ({stats?.absentDays ?? 0})
+                        </span>
+                      </>
+                    )}
                   </td>
 
                   <td className="px-3 py-2.5 tabular-nums text-text-muted">
