@@ -151,7 +151,25 @@ export const listWorkers = asyncHandler(async (req, res) => {
   ]);
 
   const workerIds = pageWorkers.map((worker) => worker.id);
+  const monthlyPayrolls = workerIds.length
+  ? await prisma.workerPayroll.findMany({
+      where: {
+        workerId: { in: workerIds },
+        payrollMonth: start,
+      },
+      select: {
+        workerId: true,
+        hourlyRate: true,
+      },
+    })
+  : [];
 
+const rateByWorker = new Map(
+  monthlyPayrolls.map((payroll) => [
+    payroll.workerId,
+    Number(payroll.hourlyRate),
+  ])
+);
   // Aggregate only the selected workers' records for this month.
   const attendanceGroups = workerIds.length
     ? await prisma.workRecord.groupBy({
@@ -190,12 +208,25 @@ export const listWorkers = asyncHandler(async (req, res) => {
     }
   }
 
-  const workers = pageWorkers.map((worker) => ({
+const workers = pageWorkers.map((worker) => {
+  const totalHours =
+    attendanceByWorker.get(worker.id)?.totalHours ?? 0;
+
+  const hourlyRate = rateByWorker.get(worker.id) ?? null;
+
+  const grossPay =
+    hourlyRate === null
+      ? null
+      : Math.round((totalHours * hourlyRate + Number.EPSILON) * 100) / 100;
+
+  return {
     ...worker,
     status: getWorkerStatusForMonth(worker, reportingMonth),
-    totalHours: attendanceByWorker.get(worker.id).totalHours,
-    absentDays: attendanceByWorker.get(worker.id).absentDays,
-  }));
+    totalHours,
+    hourlyRate,
+    grossPay,
+  };
+});
 
   res.json({
     workers,

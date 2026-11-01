@@ -4,6 +4,15 @@ import { Link } from "react-router-dom";
 import { Users, RefreshCw,ChevronLeft,ChevronRight } from "lucide-react";
 
 import EmptyState from "../ui/EmptyState.jsx";
+
+function formatAED(value) {
+  return new Intl.NumberFormat("en-AE", {
+    style: "currency",
+    currency: "AED",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
 export default function WorkersTab({
   workers,
   companyId,
@@ -20,14 +29,13 @@ export default function WorkersTab({
 }) {
   const loading = workersLoading;
 
-  const hoursByWorker = new Map(
+const hoursByWorker = new Map(
   workers.map((worker) => [
     worker.id,
     {
-      workerId: worker.id,
       totalHours: worker.totalHours ?? 0,
-      absentDays: worker.absentDays ?? 0,
-      failed: false,
+      hourlyRate: worker.hourlyRate ?? null,
+      grossPay: worker.grossPay ?? null,
     },
   ])
 );
@@ -140,14 +148,15 @@ return (
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Job title</th>
                 <th className="px-3 py-2 font-medium">Work hrs</th>
-                <th className="px-3 py-2 font-medium">Absents</th>
+                <th className="px-3 py-2 font-medium">Pay/hr</th>
+                <th className="px-3 py-2 font-medium">Gross Pay</th>
               </tr>
             </thead>
 
             <tbody>
               {workers.map((worker) => {
                 const stats = hoursByWorker.get(worker.id);
-                const unavailable = stats?.failed;
+                
 
                 return (
                   <tr
@@ -180,20 +189,24 @@ return (
                     </td>
 
                     <td className="px-3 py-2.5 tabular-nums text-text-muted">
-                      {loading
-                        ? "..."
-                        : unavailable
-                          ? "—"
-                          : `${stats?.totalHours ?? 0} h`}
-                    </td>
+                    {loading ? "..." : `${stats?.totalHours ?? 0} h`}
+                  </td>
 
-                    <td className="px-3 py-2.5 tabular-nums text-text-muted">
-                      {loading
-                        ? "..."
-                        : unavailable
-                          ? "—"
-                          : stats?.absentDays ?? 0}
-                    </td>
+                  <td className="px-3 py-2.5 tabular-nums text-text-muted">
+                    {loading
+                      ? "..."
+                      : stats?.hourlyRate == null
+                        ? "—"
+                        : formatAED(stats.hourlyRate)}
+                  </td>
+
+                  <td className="px-3 py-2.5 tabular-nums font-medium text-text">
+                    {loading
+                      ? "..."
+                      : stats?.grossPay == null
+                        ? "—"
+                        : formatAED(stats.grossPay)}
+                  </td>
                   </tr>
                 );
               })}
