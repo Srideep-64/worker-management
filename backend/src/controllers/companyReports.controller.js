@@ -357,324 +357,514 @@ export const exportCompanyMonthlyExcel = asyncHandler(
 );
 
 
-export const exportCompanyMonthlyPdf = asyncHandler(
-  async (req, res) => {
-    const month = req.query.month || currentMonthString();
-    const displayMonth = formatReportMonth(month);
 
-    const report = await getCompanyMonthlyReport(
-      req.params.id,
-      month
-    );
 
-    const doc = new PDFDocument({
-      size: "A4",
-      layout: "landscape",
-      margins: {
-        top: 30,
-        bottom: 38,
-        left: 24,
-        right: 24,
-      },
-      bufferPages: true,
-      autoFirstPage: true,
-    });
 
-    const safeCode = report.company.code.replace(
-      /[^a-zA-Z0-9_-]/g,
-      "_"
-    );
+export const exportCompanyMonthlyPdf = asyncHandler(async (req, res) => {
+  const month = req.query.month || currentMonthString();
+  const displayMonth = formatReportMonth(month);
 
-    res.setHeader(
-      "Content-Type",
-      "application/pdf"
-    );
+  const report = await getCompanyMonthlyReport(
+    req.params.id,
+    month
+  );
 
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="payroll-${safeCode}-${month}.pdf"`
-    );
+  const doc = new PDFDocument({
+    size: "A4",
+    layout: "landscape",
+    margins: {
+      top: 20,
+      right: 24,
+      bottom: 40,
+      left: 24,
+    },
+    bufferPages: true,
+  });
 
-    doc.pipe(res);
+  const safeCode = String(report.company.code).replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_"
+  );
 
-    const pageWidth = doc.page.width;
-    const pageHeight = doc.page.height;
-    const left = doc.page.margins.left;
-    const right = pageWidth - doc.page.margins.right;
-    const bottom = pageHeight - doc.page.margins.bottom - 25;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="payroll-${safeCode}-${month}.pdf"`
+  );
 
-    const money = (value) =>
-      value == null
-        ? "N/A"
-        : Number(value).toLocaleString("en-AE", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
+  doc.pipe(res);
 
-        const generatedAt = new Intl.DateTimeFormat("en-AE", {
-        timeZone: "Asia/Dubai",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        }).format(report.generatedAt) + " UAE time";
+  const C = {
+    navy: "#17283F",
+    blue: "#245A81",
+    ink: "#233246",
+    muted: "#64748B",
+    border: "#DCE4ED",
+    stripe: "#F5F8FC",
+    white: "#FFFFFF",
+    pale: "#EDF3F9",
+  };
 
-    // Report heading
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+
+  const left = 24;
+  const right = pageWidth - 24;
+  const usableWidth = right - left;
+
+  const rowHeight = 28;
+  const headerHeight = 35;
+
+  // Reserve only the space needed for the footer.
+  // Rows can occupy the remaining usable page area.
+  const footerLineY = pageHeight - 39;
+  const footerTextY = pageHeight - 29;
+  const tableBottom = footerLineY - 8;
+
+  const totals = report.totals;
+
+  const fmtNumber = (value, digits = 2) =>
+    value == null
+      ? "N/A"
+      : Number(value).toLocaleString("en-AE", {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
+        });
+
+  const generatedAt =
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Dubai",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(report.generatedAt) + " UAE";
+
+  // 11-column payroll table
+  const columns = [
+    { label: "S.No.", width: 36, align: "center" },
+    { label: "Worker ID", width: 75 },
+    { label: "Worker Name", width: 145 },
+    { label: "Role", width: 60 },
+    { label: "Absent", width: 49, align: "center" },
+    { label: "Hours", width: 57, align: "right" },
+    { label: "Rate", width: 57, align: "right" },
+    { label: "Gross", width: 80, align: "right" },
+    { label: "Deduct.", width: 75, align: "right" },
+    { label: "Advances", width: 83, align: "right" },
+    { label: "Balance", width: 87, align: "right" },
+  ];
+
+  const baseWidth = columns.reduce(
+    (sum, col) => sum + col.width,
+    0
+  );
+
+  columns.forEach((col) => {
+    col.width = (col.width / baseWidth) * usableWidth;
+  });
+
+  function drawCellText(
+    value,
+    x,
+    y,
+    width,
+    height,
+    options = {}
+  ) {
+    const {
+      size = 9,
+      color = C.ink,
+      bold = false,
+      align = "left",
+      padding = 5,
+    } = options;
+
+    const textHeight = size * 1.3;
+
+    doc
+      .font(bold ? "Helvetica-Bold" : "Helvetica")
+      .fontSize(size)
+      .fillColor(color)
+      .text(
+        String(value ?? "-"),
+        x + padding,
+        y + (height - textHeight) / 2,
+        {
+          width: Math.max(1, width - padding * 2),
+          height: textHeight,
+          align,
+          lineBreak: false,
+          ellipsis: true,
+        }
+      );
+  }
+
+  // Header on every page
+  function drawPageHeading() {
+    doc.rect(0, 0, pageWidth, 8).fill(C.navy);
+
     doc
       .font("Helvetica-Bold")
-      .fontSize(17)
-      .text(report.company.name, left, 26, {
-        width: right - left,
+      .fontSize(22)
+      .fillColor(C.navy)
+      .text(report.company.name, left, 23, {
+        width: usableWidth - 220,
+        height: 28,
+        lineBreak: false,
+        ellipsis: true,
       });
 
     doc
       .font("Helvetica")
-      .fontSize(10)
-      .text(`Company Code: ${report.company.code}`, left, 48);
+      .fontSize(9.8)
+      .fillColor(C.muted)
+      .text(
+        `Company Code: ${report.company.code}`,
+        left,
+        54,
+        {
+          width: usableWidth - 220,
+          height: 15,
+          lineBreak: false,
+        }
+      );
 
-    doc.text(`Reporting Month: ${displayMonth}`, left, 61);
+    // Prominent reporting month
+    const boxWidth = 190;
+    const boxHeight = 54;
+    const boxX = right - boxWidth;
 
-    doc.text(`Generated At: ${generatedAt}`, left, 74);
-
-    const totals = report.totals;
+    doc
+      .roundedRect(boxX, 17, boxWidth, boxHeight, 6)
+      .fill(C.pale);
 
     doc
       .font("Helvetica-Bold")
-      .fontSize(11)
-      .text("Monthly Summary", left, 94);
+      .fontSize(9.2)
+      .fillColor(C.muted)
+      .text("REPORTING MONTH", boxX + 10, 24, {
+        width: boxWidth - 20,
+        height: 14,
+        align: "center",
+        lineBreak: false,
+      });
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(18.4)
+      .fillColor(C.navy)
+      .text(displayMonth, boxX + 10, 41, {
+        width: boxWidth - 20,
+        height: 24,
+        align: "center",
+        lineBreak: false,
+        ellipsis: true,
+      });
+
+    doc
+      .moveTo(left, 78)
+      .lineTo(right, 78)
+      .strokeColor(C.border)
+      .lineWidth(0.7)
+      .stroke();
+  }
+
+  function drawMetric(x, y, width, label, value) {
+    const height = 55;
+
+    doc
+      .roundedRect(x, y, width, height, 5)
+      .fill(C.pale);
 
     doc
       .font("Helvetica")
-      .fontSize(9)
-      .text(
-        `Workers: ${totals.workerCount}   |   ` +
-        `Hours: ${money(totals.totalHours)}   |   ` +
-        `Worked: ${totals.workedDays}   |   ` +
-        `Absent: ${totals.absentDays}   |   ` +
-        `Holidays: ${totals.holidays}   |   ` +
-        `Weekly Offs: ${totals.weeklyOffs}`,
-        left,
-        109,
-        { width: right - left }
-      );
+      .fontSize(9.2)
+      .fillColor(C.muted)
+      .text(label, x + 11, y + 9, {
+        width: width - 22,
+        height: 13,
+        lineBreak: false,
+      });
 
     doc
-      .font("Helvetica")
-      .fontSize(9)
-      .text(
-        `Workers without payroll rates: ${totals.workersWithoutRate}`,
-        left,
-        122
-      );
+      .font("Helvetica-Bold")
+      .fontSize(17.3)
+      .fillColor(C.navy)
+      .text(String(value), x + 11, y + 29, {
+        width: width - 22,
+        height: 22,
+        lineBreak: false,
+        ellipsis: true,
+      });
+  }
 
-    doc
-      .font("Helvetica")
-      .fontSize(8)
-      .text(
-        "Payroll totals below include workers with configured rates. " +
-        "Total advances include all workers. N/A means payroll cannot be calculated.",
-        left,
-        135,
-        { width: right - left }
-      );
+  drawPageHeading();
 
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(11.5)
+    .fillColor(C.blue)
+    .text("MONTHLY PAYROLL REPORT", left, 88, {
+      height: 17,
+      lineBreak: false,
+    });
 
-    const columns = [
-      { label: "S.No.", key: "serialNumber", width: 26 },
-      { label: "Worker ID", key: "workerCode", width: 58 },
-      { label: "Name", key: "name", width: 85 },
-      { label: "Worked", key: "workedDays", width: 38 },
-      { label: "Absent", key: "absentDays", width: 38 },
-      { label: "Role", key: "role", width: 55 },
-      { label: "Rate (AED)", key: "hourlyRate", width: 50 },
-      { label: "Hours", key: "totalHours", width: 38 },
-      { label: "Gross (AED)", key: "grossPay", width: 55 },
-      { label: "Deduct. (AED)", key: "absenceDeduction", width: 55 },
-      { label: "Net (AED)", key: "netPay", width: 50 },
-      { label: "Advances (AED)", key: "totalAdvances", width: 55 },
-      { label: "Remaining (AED)", key: "remainingPay", width: 58 },
-      { label: "S.No.", key: "serialNumberEnd", width: 26 },
-    ];
+  const cardY = 110;
+  const cardGap = 10;
+  const cardWidth = (usableWidth - cardGap * 3) / 4;
 
+  [
+    ["Total workers", totals.workerCount],
+    ["Total hours", fmtNumber(totals.totalHours)],
+    ["Net Pay (AED)", fmtNumber(totals.netPay)],
+    ["Balance (AED)", fmtNumber(totals.remainingPay)],
+  ].forEach(([label, value], i) => {
+    drawMetric(
+      left + i * (cardWidth + cardGap),
+      cardY,
+      cardWidth,
+      label,
+      value
+    );
+  });
 
-    const tableWidth = columns.reduce(
-      (sum, column) => sum + column.width,
-      0
+  doc
+    .font("Helvetica")
+    .fontSize(9.2)
+    .fillColor(C.muted)
+    .text(
+      `Holidays: ${totals.holidays}   |   ` +
+      `Workers without rate: ${totals.workersWithoutRate}`,
+      left,
+      174,
+      {
+        width: usableWidth,
+        height: 14,
+        lineBreak: false,
+      }
     );
 
-    const tableLeft = left;
-    const rowHeight = 25;
-    let y = 154;
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10.4)
+    .fillColor(C.navy)
+    .text("PAYROLL BREAKDOWN", left, 195, {
+      height: 16,
+      lineBreak: false,
+    });
 
-    function drawTableHeader() {
-      let x = tableLeft;
-
-      doc.font("Helvetica-Bold").fontSize(7);
-
-      for (const column of columns) {
-        doc
-          .rect(x, y, column.width, rowHeight)
-          .fillAndStroke("#E8E8E8", "#999999");
-
-        doc
-          .fillColor("#111111")
-          .text(
-            column.label,
-            x + 3,
-            y + 7,
-            {
-              width: column.width - 6,
-              height: rowHeight - 6,
-              lineBreak: true,
-            }
-          );
-
-        x += column.width;
+  doc
+    .font("Helvetica")
+    .fontSize(9.2)
+    .fillColor(C.muted)
+    .text(
+      "All monetary amounts in AED",
+      right - 215,
+      195,
+      {
+        width: 215,
+        height: 15,
+        align: "right",
+        lineBreak: false,
       }
+    );
 
-      y += rowHeight;
+  let y = 216;
+
+  function drawTableHeader() {
+    doc
+      .rect(left, y, usableWidth, headerHeight)
+      .fill(C.navy);
+
+    let x = left;
+
+    for (const col of columns) {
+      drawCellText(
+        col.label,
+        x,
+        y,
+        col.width,
+        headerHeight,
+        {
+          size: 9.2,
+          bold: true,
+          color: C.white,
+          align: col.align || "left",
+          padding: 4,
+        }
+      );
+
+      x += col.width;
     }
 
-    function drawRow(values, bold = false) {
-      let x = tableLeft;
+    y += headerHeight;
+  }
 
-      doc
-        .font(bold ? "Helvetica-Bold" : "Helvetica")
-        .fontSize(7.5)
-        .fillColor("#111111");
+  function drawTableRow(cells, index, isTotal = false) {
+    const background = isTotal
+      ? C.pale
+      : index % 2 === 0
+      ? C.white
+      : C.stripe;
 
-      for (let i = 0; i < columns.length; i += 1) {
-        const column = columns[i];
+    doc
+      .rect(left, y, usableWidth, rowHeight)
+      .fill(background);
 
-        doc
-          .rect(x, y, column.width, rowHeight)
-          .strokeColor("#BBBBBB")
-          .stroke();
+    let x = left;
 
-        doc.text(
-          String(values[i] ?? "N/A"),
-          x + 3,
-          y + 8,
-          {
-            width: column.width - 6,
-            height: rowHeight - 8,
-            ellipsis: true,
-            lineBreak: false,
-          }
-        );
+    cells.forEach((cell, i) => {
+      const col = columns[i];
 
-        x += column.width;
-      }
+      drawCellText(
+        cell,
+        x,
+        y,
+        col.width,
+        rowHeight,
+        {
+          size: 9,
+          bold: isTotal,
+          color: isTotal ? C.navy : C.ink,
+          align: col.align || "left",
+          padding: 4,
+        }
+      );
 
-      y += rowHeight;
-    }
+      x += col.width;
+    });
 
-    function addTablePage() {
-      doc.addPage();
-      y = 35;
-      drawTableHeader();
-    }
+    doc
+      .moveTo(left, y + rowHeight)
+      .lineTo(right, y + rowHeight)
+      .strokeColor(C.border)
+      .lineWidth(0.35)
+      .stroke();
+
+    y += rowHeight;
+  }
+
+  function nextPage() {
+    doc.addPage();
+    drawPageHeading();
+
+    // Compact continuation pages:
+    // table begins immediately below the header.
+    y = 90;
 
     drawTableHeader();
+  }
 
-    for (const [index,worker] of report.workers.entries()) {
-      if (y + rowHeight > bottom - 5) {
-        addTablePage();
-      }
+  drawTableHeader();
 
-
-    drawRow([
-      index + 1,
-      worker.workerCode,
-      worker.name,
-      worker.workedDays,
-      worker.absentDays,
-      worker.role,
-      money(worker.hourlyRate),
-      money(worker.totalHours),
-      money(worker.grossPay),
-      money(worker.absenceDeduction),
-      money(worker.netPay),
-      money(worker.totalAdvances),
-      money(worker.remainingPay),
-      index + 1,
-    ]);
-
+  // Fit as many rows as possible above the footer.
+  // No unnecessary bottom padding.
+  for (const [index, worker] of report.workers.entries()) {
+    if (y + rowHeight > tableBottom) {
+      nextPage();
     }
 
+    drawTableRow(
+      [
+        index + 1,
+        worker.workerCode,
+        worker.name,
+        worker.roleCode ?? "-",
+        worker.absentDays,
+        fmtNumber(worker.totalHours),
+        fmtNumber(worker.hourlyRate),
+        fmtNumber(worker.grossPay),
+        fmtNumber(worker.absenceDeduction),
+        fmtNumber(worker.totalAdvances),
+        fmtNumber(worker.remainingPay),
+      ],
+      index
+    );
+  }
 
-    const totalsRow = [
+  // Totals row
+  if (y + rowHeight > tableBottom) {
+    nextPage();
+  }
+
+  drawTableRow(
+    [
       "",
       "TOTAL",
       "",
-      totals.workedDays,
+      "",
       totals.absentDays,
+      fmtNumber(totals.totalHours),
       "",
-      "",
-      money(totals.totalHours),
-      money(totals.grossPay),
-      money(totals.absenceDeduction),
-      money(totals.netPay),
-      money(totals.totalAdvances),
-      money(totals.remainingPay),
-      "",
-    ];
+      fmtNumber(totals.grossPay),
+      fmtNumber(totals.absenceDeduction),
+      fmtNumber(totals.totalAdvances),
+      fmtNumber(totals.remainingPay),
+    ],
+    report.workers.length,
+    true
+  );
 
+  // Page numbers and generated time
+  // Both use exactly the same Y position.
+  const pageRange = doc.bufferedPageRange();
+  const pageCount = pageRange.count;
 
-    if (y + rowHeight > bottom - 5) {
-      addTablePage();
-    }
+  for (
+    let pageIndex = pageRange.start;
+    pageIndex < pageRange.start + pageCount;
+    pageIndex++
+  ) {
+    doc.switchToPage(pageIndex);
 
-    drawRow(totalsRow, true);
+    doc
+      .moveTo(left, footerLineY)
+      .lineTo(right, footerLineY)
+      .strokeColor(C.border)
+      .lineWidth(0.6)
+      .stroke();
 
-    // Add page numbers and footer dates to every page.
-    // Add page numbers and footer dates to every page.
-        const pageRange = doc.bufferedPageRange();
+    // Prevent automatic page breaks while drawing footers.
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
 
-        for (
-        let pageIndex = pageRange.start;
-        pageIndex < pageRange.start + pageRange.count;
-        pageIndex += 1
-        ) {
-        doc.switchToPage(pageIndex);
-
-        // Allow footer text below the normal content boundary.
-        const originalBottomMargin = doc.page.margins.bottom;
-        doc.page.margins.bottom = 0;
-
-        doc
-            .font("Helvetica")
-            .fontSize(7.5)
-            .fillColor("#555555")
-            .text(
-            `Generated: ${generatedAt}`,
-            left,
-            pageHeight - 50,
-            {
-                width: tableWidth / 2,
-                height: 10,
-                lineBreak: false,
-            }
-            );
-
-        doc.text(
-            `Page ${pageIndex + 1} of ${pageRange.count}`,
-            right - 120,
-            pageHeight - 50,
-            {
-            width: 120,
-            height: 10,
-            align: "right",
-            lineBreak: false,
-            }
-        );
-
-        // Restore the original margin.
-        doc.page.margins.bottom = originalBottomMargin;
+    doc
+      .font("Helvetica")
+      .fontSize(9.2)
+      .fillColor(C.muted)
+      .text(
+        `Generated: ${generatedAt}`,
+        left,
+        footerTextY,
+        {
+          width: usableWidth / 2,
+          height: 14,
+          lineBreak: false,
         }
+      );
 
-        doc.end();
+    doc
+      .font("Helvetica")
+      .fontSize(9.2)
+      .fillColor(C.muted)
+      .text(
+        `Page ${pageIndex - pageRange.start + 1} of ${pageCount}`,
+        right - 150,
+        footerTextY,
+        {
+          width: 150,
+          height: 14,
+          align: "right",
+          lineBreak: false,
+        }
+      );
+
+    doc.page.margins.bottom = originalBottomMargin;
   }
-);
+
+  doc.end();
+});
+
