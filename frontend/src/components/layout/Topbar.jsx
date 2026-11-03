@@ -41,7 +41,7 @@ export default function Topbar({ onMenuClick }) {
         <button
           type="button"
           onClick={onMenuClick}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-paper hover:text-text md:hidden"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-paper hover:text-text "
           aria-label="Open navigation"
         >
           <Menu className="h-5 w-5" />

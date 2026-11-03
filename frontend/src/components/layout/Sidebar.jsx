@@ -33,7 +33,7 @@ export default function Sidebar({ open, onClose }) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-ink text-white transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-ink text-white transition-transform duration-200  ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -52,7 +52,7 @@ export default function Sidebar({ open, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-white/60 hover:bg-ink-soft hover:text-white md:hidden"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-white/60 hover:bg-ink-soft hover:text-white "
             aria-label="Close navigation"
           >
             <X className="h-5 w-5" />
@@ -81,7 +81,7 @@ export default function Sidebar({ open, onClose }) {
         </nav>
 
         <div className="border-t border-white/10 px-5 py-4 text-xs text-white/40">
-          Made by &middot; Srideep Reddy
+          Made by Srideep Reddy
         </div>
       </aside>
     </>
