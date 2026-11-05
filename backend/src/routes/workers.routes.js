@@ -25,7 +25,7 @@ import {
 } from "../controllers/payroll.controller.js";
 
 import { downloadWorkerPdf } from "../controllers/workerPdf.controller.js";
-
+import { downloadWorkerWorkPdf } from "../controllers/workerWorkPdf.controller.js";
 import { validate } from "../middleware/validate.js";
 
 const router = Router();
@@ -89,6 +89,12 @@ router.post(
   createManualWorkBatch,
 );
 
-router.get("/workers/:id/pdf", downloadWorkerPdf);
+router.get("/workers/:id/pdf", (req, res, next) => {
+  if (req.query.type === "work") {
+    return downloadWorkerWorkPdf(req, res, next);
+  }
+
+  return downloadWorkerPdf(req, res, next);
+});
 
 export default router;

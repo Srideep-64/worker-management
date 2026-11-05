@@ -636,7 +636,6 @@ export const exportCompanyMonthlyPdf = asyncHandler(async (req, res) => {
     .fontSize(9.2)
     .fillColor(C.muted)
     .text(
-      `Holidays: ${totals.holidays}   |   ` +
       `Workers without rate: ${totals.workersWithoutRate}`,
       left,
       174,
