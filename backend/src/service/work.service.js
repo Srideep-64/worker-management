@@ -319,7 +319,8 @@ export class WorkService {
 
   static async getCompanyStats(companyId, month = currentMonthString()) {
     const company = await prisma.company.findUnique({
-      where: { id: companyId }, select: { id: true },
+      where: { id: companyId },
+      select: { id: true },
     });
 
     if (!company) throw ApiError.notFound("Company not found");
@@ -327,22 +328,19 @@ export class WorkService {
     const { start, end } = monthRange(month);
 
     const workers = await prisma.worker.findMany({
-      where: { companyId: company.id }, select: { id: true },
+      where: { companyId: company.id },
+      select: { id: true },
     });
-
     const workerIds = workers.map((worker) => worker.id);
 
-    const [rows, activeUpload, payrollRates, advances] = await Promise.all([
+    // The Monthly Stats UI no longer needs role breakdowns or upload source.
+    const [rows, payrollRates, advances] = await Promise.all([
       prisma.workRecord.findMany({
-        where: { workerId: { in: workerIds }, workDate: { gte: start, lt: end } },
-        select: {
-          workerId: true, status: true, hours: true,
-          role: { select: { code: true, name: true } },
+        where: {
+          workerId: { in: workerIds },
+          workDate: { gte: start, lt: end },
         },
-      }),
-      prisma.timesheetUpload.findFirst({
-        where: { companyId: company.id, periodMonth: start, status: "ACTIVE" },
-        select: { id: true, originalFilename: true, uploadedAt: true },
+        select: { workerId: true, status: true, hours: true },
       }),
       prisma.workerPayroll.findMany({
         where: { workerId: { in: workerIds }, payrollMonth: start },
@@ -354,23 +352,41 @@ export class WorkService {
       }),
     ]);
 
-    const records = rows.map((record) => ({
-      ...record,
-      hours: record.hours == null ? null : Number(record.hours),
-    }));
-
-    const summary = summarize(records);
+    const summary = {
+      totalHours: 0,
+      workedDays: 0,
+      absentDays: 0,
+      holidays: 0,
+      weeklyOffs: 0,
+    };
     const attendanceByWorker = new Map();
 
-    for (const record of records) {
+    for (const record of rows) {
       if (!attendanceByWorker.has(record.workerId)) {
         attendanceByWorker.set(record.workerId, { totalHours: 0, absentDays: 0 });
       }
       const attendance = attendanceByWorker.get(record.workerId);
-      if (record.status === "WORKED") {
-        attendance.totalHours += record.hours ?? 0;
-      } else if (record.status === "ABSENT") {
-        attendance.absentDays += 1;
+
+      switch (record.status) {
+        case "WORKED": {
+          const hours = Number(record.hours ?? 0);
+          summary.totalHours += hours;
+          summary.workedDays += 1;
+          attendance.totalHours += hours;
+          break;
+        }
+        case "ABSENT":
+          summary.absentDays += 1;
+          attendance.absentDays += 1;
+          break;
+        case "HOLIDAY":
+          summary.holidays += 1;
+          break;
+        case "WEEKLY_OFF":
+          summary.weeklyOffs += 1;
+          break;
+        default:
+          break;
       }
     }
 
@@ -386,15 +402,21 @@ export class WorkService {
       );
     }
 
-    let workersWithRate = 0, workersWithoutRate = 0, grossPay = 0, absenceDeductions = 0, netPay = 0, totalAdvances = 0;
+    let workersWithRate = 0;
+    let workersWithoutRate = 0;
+    let grossPay = 0;
+    let absenceDeductions = 0;
+    let netPay = 0;
+    let totalAdvances = 0;
 
     for (const worker of workers) {
       const hourlyRate = rateByWorker.get(worker.id);
-      const attendance = attendanceByWorker.get(worker.id) ?? { totalHours: 0, absentDays: 0 };
+      const attendance = attendanceByWorker.get(worker.id) ?? {
+        totalHours: 0, absentDays: 0,
+      };
       const workerAdvances = advancesByWorker.get(worker.id) ?? 0;
 
       totalAdvances += workerAdvances;
-
       if (hourlyRate === undefined) {
         workersWithoutRate += 1;
         continue;
@@ -402,8 +424,10 @@ export class WorkService {
 
       workersWithRate += 1;
       const payroll = calculatePayroll({
-        totalHours: attendance.totalHours, absentDays: attendance.absentDays,
-        hourlyRate, totalAdvances: workerAdvances,
+        totalHours: attendance.totalHours,
+        absentDays: attendance.absentDays,
+        hourlyRate,
+        totalAdvances: workerAdvances,
       });
 
       grossPay += payroll.grossPay;
@@ -412,16 +436,21 @@ export class WorkService {
     }
 
     const payrollSummary = {
-      workersWithRate, workersWithoutRate,
-      grossPay: money(grossPay), absenceDeductions: money(absenceDeductions),
-      netPay: money(netPay), totalAdvances: money(totalAdvances),
+      workersWithRate,
+      workersWithoutRate,
+      grossPay: money(grossPay),
+      absenceDeductions: money(absenceDeductions),
+      netPay: money(netPay),
+      totalAdvances: money(totalAdvances),
       remainingPay: money(netPay - totalAdvances),
     };
 
     return {
-      month, activeUpload,
-      workersWithRecords: new Set(rows.map((record) => record.workerId)).size,
-      summary, payrollSummary,
+      month,
+      workersWithRecords: attendanceByWorker.size,
+      summary,
+      payrollSummary,
     };
   }
+
 }

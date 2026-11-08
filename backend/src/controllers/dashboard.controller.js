@@ -75,18 +75,23 @@ export const getDashboard = asyncHandler(async (req, res) => {
 
   const month = parsed.data;
   const previousMonth = previousMonthString(month);
+  const twoMonthsBack = previousMonthString(previousMonth);
   const { start, end } = monthRange(month);
   const { start: previousStart, end: previousEnd } = monthRange(previousMonth);
+  const { start: olderStart, end: olderEnd } = monthRange(twoMonthsBack);
   const daysCurrent = calendarDaysInMonth(month);
   const daysPrevious = calendarDaysInMonth(previousMonth);
+  const daysOlder = calendarDaysInMonth(twoMonthsBack);
   const currentMonth = currentUaeMonthString(); // Active headcounts reflect today.
 
   const [
     companies,
     attendance,
     previousAttendance,
+    olderAttendance,
     rates,
     previousRates,
+    olderRates,
     advances,
     expiring,
   ] = await Promise.all([
@@ -109,12 +114,22 @@ export const getDashboard = asyncHandler(async (req, res) => {
       _sum: { hours: true },
       _count: { _all: true },
     }),
+    prisma.workRecord.groupBy({
+      by: ["workerId", "workDate", "status"],
+      where: { workDate: { gte: olderStart, lt: olderEnd } },
+      _sum: { hours: true },
+      _count: { _all: true },
+    }),
     prisma.workerPayroll.findMany({
       where: { payrollMonth: start },
       select: { workerId: true, hourlyRate: true },
     }),
     prisma.workerPayroll.findMany({
       where: { payrollMonth: previousStart },
+      select: { workerId: true, hourlyRate: true },
+    }),
+    prisma.workerPayroll.findMany({
+      where: { payrollMonth: olderStart },
       select: { workerId: true, hourlyRate: true },
     }),
     prisma.advancePayment.groupBy({
@@ -127,10 +142,14 @@ export const getDashboard = asyncHandler(async (req, res) => {
 
   const selectedWork = summarizeAttendance(attendance);
   const previousWork = summarizeAttendance(previousAttendance);
+  const olderWork = summarizeAttendance(olderAttendance);
   const rateByWorker = new Map(rates.map((r) => [
     r.workerId, r.hourlyRate == null ? null : Number(r.hourlyRate),
   ]));
   const previousRateByWorker = new Map(previousRates.map((r) => [
+    r.workerId, r.hourlyRate == null ? null : Number(r.hourlyRate),
+  ]));
+  const olderRateByWorker = new Map(olderRates.map((r) => [
     r.workerId, r.hourlyRate == null ? null : Number(r.hourlyRate),
   ]));
   const advanceByWorker = new Map(advances.map((a) => [
@@ -229,8 +248,69 @@ export const getDashboard = asyncHandler(async (req, res) => {
     };
   });
 
+  // Dashboard-wide trend: selected month's per-worker average compared with
+  // the worker-count-weighted mean of the TWO preceding monthly averages.
+  // Complete-month coverage requires every distinct calendar date; all statuses
+  // count toward coverage. Hour averages don't need a payroll rate, pay averages do.
+  const allWorkers = companies.flatMap((company) => company.workers);
+  const periods = [
+    { work: selectedWork, rateMap: rateByWorker, days: daysCurrent },
+    { work: previousWork, rateMap: previousRateByWorker, days: daysPrevious },
+    { work: olderWork, rateMap: olderRateByWorker, days: daysOlder },
+  ];
+  const summaries = periods.map(({ work, rateMap, days }) => {
+    let hours = 0, hoursWorkers = 0, gross = 0, payWorkers = 0;
+    for (const worker of allWorkers) {
+      if (!hasFullMonthRecords(work, worker.id, days)) continue;
+      hoursWorkers += 1;
+      hours += work.hoursByWorker.get(worker.id) ?? 0;
+      const rate = rateMap.get(worker.id);
+      if (validRate(rate)) {
+        payWorkers += 1;
+        gross += grossPayForWorker(work, worker.id, rate);
+      }
+    }
+    return {
+      hoursCount: hoursWorkers,
+      payCount: payWorkers,
+      hoursTotal: hours,
+      grossTotal: gross,
+      hoursAverage: hoursWorkers ? hours / hoursWorkers : null,
+      grossAverage: payWorkers ? gross / payWorkers : null,
+    };
+  });
+
+  function trendFor(key, countKey, totalKey) {
+    const [selected, previous, older] = summaries;
+    if ([selected, previous, older].some((s) => s[countKey] < MIN_RECORDED_WORKERS_FOR_TREND)) {
+      return { currentAverage: selected[key] == null ? null : Math.round(selected[key] * 100) / 100, difference: null, percent: null };
+    }
+    // Weight each prior month by its eligible worker count, separately for
+    // hours and payroll. Equivalent to (sum of totals) / (sum of workers).
+    const baseline =
+      (previous[totalKey] + older[totalKey]) /
+      (previous[countKey] + older[countKey]);
+    const difference = selected[key] - baseline;
+    if (!(baseline > 0) || !Number.isFinite(difference)) {
+      return { currentAverage: Math.round(selected[key] * 100) / 100, difference: null, percent: null };
+    }
+    return {
+      currentAverage: Math.round(selected[key] * 100) / 100,
+      difference: Math.round(difference * 100) / 100,
+      percent: Math.round((difference / baseline) * 10000) / 100,
+    };
+  }
+
+  const workforceTrends = {
+    hours: trendFor("hoursAverage", "hoursCount", "hoursTotal"),
+    grossPay: trendFor("grossAverage", "payCount", "grossTotal"),
+    period: month,
+    comparisonMonths: [previousMonth, twoMonthsBack],
+  };
+
   res.json({
     month,
+    workforceTrends,
     companies: result,
     companiesCount: result.length,
     workersCount: result.reduce((sum, company) => sum + company.activeWorkerCount, 0),

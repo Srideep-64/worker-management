@@ -165,9 +165,7 @@ export default function MonthlyStats({ companyId, companyCode, month, setMonth }
       {/* Controls above the expanded dashboard-style card */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="stats-month" className="mr-1 text-sm font-semibold text-text">
-            Reporting month
-          </label>
+          
           <button
             type="button"
             className={`${buttonClass} w-10 px-0`}

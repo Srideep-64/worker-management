@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Building2,
-  BuildingComplexPlusIcon,
   CalendarDays,
   Plus,
   RefreshCw,
   UserPlus,
   Users,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  BuildingComplexPlus,
 } from "lucide-react";
 
 import CompanyMonthlyCard from "../components/dashboard/CompanyMonthlyCard.jsx";
@@ -16,6 +19,7 @@ import AddCompanyModal from "../components/dashboard/AddCompanyModal.jsx";
 import ExpiringDocuments from "../components/dashboard/ExpiringDocuments.jsx";
 import AddWorkerModal from "../components/worker/AddWorkerModal.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
+import RecentActivity from "../components/dashboard/RecentActivity.jsx";
 
 import { api, invalidate } from "../api/client.js";
 import { useFetch } from "../hooks.js";
@@ -42,6 +46,36 @@ function formatMonth(month) {
     month: "long",
     year: "numeric",
   });
+}
+
+function TrendMetric({ label, item, unit, loading }) {
+  const ready = Boolean(item && item.difference !== null && item.difference !== undefined);
+  const difference = ready ? Number(item.difference) : 0;
+  const Icon = difference > 0 ? TrendingUp : difference < 0 ? TrendingDown : Minus;
+  const directional = difference > 0 ? "text-emerald-600 dark:text-emerald-400" : difference < 0 ? "text-rose-600 dark:text-rose-400" : "text-text-muted";
+  const format = (value) => unit === "AED"
+    ? `AED ${Number(value).toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `${Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 })} h`;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <div>
+        <p className="text-xs font-medium text-text-muted">{label}</p>
+        <p className="mt-1 text-xl font-bold tabular-nums text-text">
+          {loading ? "…" : item?.currentAverage != null ? format(item.currentAverage) : "—"}
+        </p>
+      </div>
+      {!loading && ready && (
+        <div className={`text-right ${directional}`} title="Difference from the average of the preceding two months">
+          <span className="inline-flex items-center justify-end gap-1 text-sm font-semibold tabular-nums">
+            <Icon className="h-4 w-4" />
+            {difference > 0 ? "+" : difference < 0 ? "−" : ""}{format(Math.abs(difference))}
+          </span>
+          <p className="text-xs tabular-nums">{item.percent > 0 ? "+" : ""}{item.percent}%</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -133,45 +167,37 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Summary cards: only the card body navigates; Add buttons remain independent. */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="group relative min-h-[164px] rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:border-accent/50">
-          <a
-            href="#dashboard-companies"
-            aria-label="Jump to companies"
-            className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          />
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-soft/70 text-accent">
-              <Building2 className="h-7 w-7" />
+      {/* Overview: matching heights, capped widths, and no stretched cards. */}
+      <div className="grid w-full max-w-[1080px] grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+                <section
+          className="flex h-full min-h-[250px] w-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6"
+          aria-label="Workforce trends"
+        >
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft/70 text-accent">
+              <TrendingUp className="h-5 w-5" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold text-text">Total companies</p>
-                <ArrowRight className="h-5 w-5 text-accent opacity-70 transition-transform group-hover:translate-x-1" />
-              </div>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-text">
-                {loading ? "…" : data?.companiesCount ?? "—"}
+            <div className="min-w-0">
+              <h2 className="font-semibold text-text">Workforce trends</h2>
+              <p className="text-xs text-text-muted">
+                {formatMonth(month)} vs previous 2-month average
               </p>
-              <p className="mt-1 text-xs text-text-muted">Manage company details and records</p>
             </div>
           </div>
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="relative z-20 inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent-soft"
-            >
-              <BuildingComplexPlusIcon className="h-4 w-4" />
-              Add company
-            </button>
+          <div className="space-y-3">
+            <TrendMetric label="Avg hours / worker" item={data?.workforceTrends?.hours} unit="h" loading={loading} />
+            <div className="border-t border-border" />
+            <TrendMetric label="Avg gross pay / worker" item={data?.workforceTrends?.grossPay} unit="AED" loading={loading} />
           </div>
-        </div>
-
-        <div className="group relative min-h-[164px] rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-accent-soft/5 hover:border-accent">
+          {data?.workforceTrends?.reason && !loading && (
+            <p className="mt-3 text-xs text-text-muted">{data.workforceTrends.reason}</p>
+          )}
+        </section>
+        <section className="group relative flex h-full min-h-[250px] w-full flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6 hover:border-accent">
+          {/* The card navigates to Workers; the Add Worker button remains independent. */}
           <Link
             to="/workers"
-            aria-label="View workers"
+            aria-label="View active workers"
             className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           />
           <div className="flex items-start gap-4">
@@ -181,38 +207,66 @@ export default function Dashboard() {
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-text">Active workers</p>
-                <ArrowRight className="h-5 w-5 text-accent transition-transform group-hover:translate-x-1" />
+              <div className="flex shrink-0 items-center gap-2 text-accent">
+                <span className="text-xs font-medium">
+                  View all workers
+                </span>
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </div>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-accent">
+              </div>
+              <p className="mt-10 text-6xl font-bold tracking-tight tabular-nums text-accent sm:text-l">
                 {loading ? "…" : data?.workersCount ?? "—"}
               </p>
-              <p className="mt-1 text-xs text-text-muted">View and manage all workers</p>
+              
+              <p className="mt-2 text-sm text-text-muted">
+                Total active workers across{" "}
+                <span className="font-semibold text-text">
+                  {data?.companiesCount ?? 0}
+                </span>{" "}
+                {data?.companiesCount === 1 ? "company" : "companies"}
+              </p>
+              
             </div>
           </div>
-          <div className="mt-3 flex justify-end">
+          <div className="mt-5 flex justify-end">
             <button
               type="button"
               onClick={() => setAddingWorker(true)}
               disabled={loading || companies.length === 0}
-              className="relative z-20 inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent-soft"
-            >
-              <UserPlus className="h-4 w-4" />
-              Add worker
+              
+              className="relative z-20 inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-accent transition-colors duration-200 hover:border-accent hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
+
+              >
+              <UserPlus className="h-4 w-4" /> Add worker
             </button>
           </div>
-        </div>
+        </section>
       </div>
+
+      {/* Recent Activity: four rows visible, additional rows scroll within the panel. */}
+      <RecentActivity />
 
       {/* Monthly results; changing month updates the request and all company reports. */}
       <section id="dashboard-companies" className="scroll-mt-6 space-y-4">
-        <div className="flex items-center gap-3 border-b border-border pb-3">
-          <Building2 className="h-6 w-6 shrink-0 text-accent" />
-          <div>
-            <h2 className="text-xl font-bold text-text">Companies</h2>
-            <p className="mt-0.5 text-sm text-text-muted">
-              Work records and payroll for {formatMonth(month)}
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Building2 className="h-6 w-6 shrink-0 text-accent" />
+            <div>
+              <h2 className="text-xl font-bold text-text">
+                Showing {loading ? "…" : data?.companiesCount ?? companies.length} Companies
+              </h2>
+              <p className="mt-0.5 text-sm text-text-muted">
+                Work records and payroll for {formatMonth(month)}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-accent bg-accent-soft/40 px-3 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent-soft"
+          >
+            <BuildingComplexPlus className="h-4 w-4" /> Add company
+          </button>
         </div>
 
         {loading ? (

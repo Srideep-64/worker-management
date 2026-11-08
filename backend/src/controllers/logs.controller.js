@@ -14,6 +14,7 @@ export const listLogsQuerySchema = z.object({
   companyId: idString.optional(),
   from: dayString.optional(),
   to: dayString.optional(),
+  action: z.string().trim().min(1).max(100).optional(),
   search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(25),
@@ -29,6 +30,7 @@ export const listLogs = asyncHandler(async (req, res) => {
   const where = {
     ...(q.category ? { category: q.category } : {}),
     ...(q.userId ? { userId: q.userId } : {}),
+    ...(q.action ? { action: q.action } : {}),
     ...(q.workerId ? { workerId: q.workerId } : {}),
     ...(q.companyId ? { companyId: q.companyId } : {}),
   };
