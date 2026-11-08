@@ -2,8 +2,10 @@ import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./lib/prisma.js";
 
-const server = app.listen(env.PORT, () => {
-  console.log(`YTS backend listening on http://localhost:${env.PORT}`);
+const PORT = Number(process.env.PORT || env.PORT || 4000);
+
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`YTS backend listening on port ${PORT}`);
 });
 
 async function shutdown(signal) {

@@ -1,11 +1,9 @@
-
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useState,
-  useRef,
 } from "react";
 
 import { api, ApiError, clearCache } from "../api/client.js";
@@ -17,12 +15,7 @@ const MAX_SESSION_ATTEMPTS = 4;
 const RETRY_DELAY_MS = 2000;
 
 function getHttpStatus(error) {
-  return (
-    error?.status ??
-    error?.statusCode ??
-    error?.response?.status ??
-    null
-  );
+  return error?.status ?? error?.statusCode ?? error?.response?.status ?? null;
 }
 
 function wait(ms) {
@@ -31,11 +24,8 @@ function wait(ms) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState("loading");
-  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
-  const loadingTimerRef = useRef(null);
   // loading | authenticated | anonymous | unavailable
-
+  const [status, setStatus] = useState("loading");
   const [connectionError, setConnectionError] = useState("");
 
   const loadSession = useCallback(async () => {
@@ -44,7 +34,14 @@ export function AuthProvider({ children }) {
 
     for (let attempt = 1; attempt <= MAX_SESSION_ATTEMPTS; attempt += 1) {
       try {
-        const data = await api.get("/me");
+        const data = await api.get("/me", { force: true });
+
+        if (!data?.user) {
+          // Do not treat a malformed successful response as authentication.
+          setUser(null);
+          setStatus("anonymous");
+          return null;
+        }
 
         setUser(data.user);
         setStatus("authenticated");
@@ -53,8 +50,7 @@ export function AuthProvider({ children }) {
       } catch (error) {
         const httpStatus = getHttpStatus(error);
 
-        // A 401 means the session is missing or expired.
-        // It is not a backend-wakeup failure.
+        // No session is normal before login.
         if (httpStatus === 401) {
           setUser(null);
           setStatus("anonymous");
@@ -62,7 +58,6 @@ export function AuthProvider({ children }) {
           return null;
         }
 
-        // Retry temporary connection/server errors.
         if (attempt < MAX_SESSION_ATTEMPTS) {
           await wait(RETRY_DELAY_MS);
           continue;
@@ -86,37 +81,12 @@ export function AuthProvider({ children }) {
     loadSession();
   }, [loadSession]);
 
-  useEffect(() => {
-  if (status !== "loading") {
-    setShowLoadingScreen(false);
-
-    if (loadingTimerRef.current) {
-      clearTimeout(loadingTimerRef.current);
-      loadingTimerRef.current = null;
-    }
-
-    return;
-  }
-
-  loadingTimerRef.current = setTimeout(() => {
-    setShowLoadingScreen(true);
-  }, 600);
-
-  return () => {
-    if (loadingTimerRef.current) {
-      clearTimeout(loadingTimerRef.current);
-      loadingTimerRef.current = null;
-    }
-  };
-}, [status]);
-
   const login = useCallback(async (email, password) => {
     const data = await api.post("/auth/login", { email, password });
     clearCache();
     setUser(data.user);
     setStatus("authenticated");
     setConnectionError("");
-
     return data.user;
   }, []);
 
@@ -131,42 +101,38 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // The same full-screen experience works on login and protected pages.
-  if (status === "loading") {
-    return showLoadingScreen ? <BackendLoadingScreen /> : null;
-  }
+  const contextValue = {
+    user,
+    status,
+    login,
+    logout,
+    refresh: loadSession,
+  };
 
-  if (status === "unavailable") {
-    return (
-      <BackendLoadingScreen
-        error={connectionError}
-        onRetry={loadSession}
-      />
-    );
-  }
-
+  // CRITICAL: Keep the tour AND its Login modal inside the context provider.
+  // Anonymous users remain on the tour after /me resolves; the tour only
+  // disappears following successful login (or if a session already exists).
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        status,
-        login,
-        logout,
-        refresh: loadSession,
-      }}
-    >
-      {children}
+    <AuthContext.Provider value={contextValue}>
+      {status === "authenticated" ? (
+        children
+      ) : (
+        <BackendLoadingScreen
+          mode="tour"
+          ready={status === "anonymous"}
+          error={status === "unavailable" ? connectionError : ""}
+          onRetry={loadSession}
+        />
+      )}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-
   if (!ctx) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
-
   return ctx;
 }
 

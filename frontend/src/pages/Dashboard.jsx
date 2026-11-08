@@ -83,6 +83,7 @@ export default function Dashboard() {
   const [addingWorker, setAddingWorker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [month, setMonth] = useState(getPreviousUaeMonth);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
   const { data, error, loading, reload } = useFetch(
     () => api.get(`/dashboard?month=${encodeURIComponent(month)}`),
@@ -91,16 +92,22 @@ export default function Dashboard() {
 
   const companies = data?.companies ?? [];
 
+  
   async function handleRefresh() {
     if (refreshing || loading) return;
+
     setRefreshing(true);
-    invalidate("/dashboard");
+
+    invalidate("/dashboard", "/logs/summary");
+
     try {
       await reload();
+      setActivityRefreshKey((key) => key + 1);
     } finally {
       setRefreshing(false);
     }
   }
+
 
   async function handleCompanyCreated() {
     setAdding(false);
@@ -244,7 +251,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Activity: four rows visible, additional rows scroll within the panel. */}
-      <RecentActivity />
+      <RecentActivity refreshKey={activityRefreshKey} />
 
       {/* Monthly results; changing month updates the request and all company reports. */}
       <section id="dashboard-companies" className="scroll-mt-6 space-y-4">
