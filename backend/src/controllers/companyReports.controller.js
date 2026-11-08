@@ -89,6 +89,13 @@ export const exportCompanyMonthlyExcel = asyncHandler(
       req.params.id,
       month
     );
+    function hoursFormat(value) {
+    const hundredths = Math.round(Number(value) * 100);
+
+    if (hundredths % 100 === 0) return "0";
+    if (hundredths % 10 === 0) return "0.0";
+    return "0.00";
+  }
 
     const headers = [
       "S.No.",
@@ -148,7 +155,7 @@ export const exportCompanyMonthlyExcel = asyncHandler(
       { width: 12 }, // Role
       ...Array.from(
         { length: report.daysInMonth },
-        () => ({ width: 5 })
+        () => ({ width: 6 })
       ),
       { width: 11 }, // Total Hrs
       { width: 6 },  // A
@@ -267,6 +274,23 @@ export const exportCompanyMonthlyExcel = asyncHandler(
           right: { style: "thin", color: { argb: "FFD9DEE5" } },
         };
       });
+
+      // Display daily worked hours with exactly 2 decimals.
+      // Keep numeric values numeric for Excel calculations.
+      for (let day = 1; day <= report.daysInMonth; day++) {
+      const cell = row.getCell(4 + day);
+
+      if (typeof cell.value === "number") {
+        cell.numFmt = hoursFormat(cell.value);
+      }
+    }
+
+      // Total Hrs column comes immediately after the day columns.
+      const totalHoursCell = row.getCell(
+        5 + report.daysInMonth
+      );
+
+      totalHoursCell.numFmt = hoursFormat(totalHoursCell.value);
 
       // Keep worker names left-aligned for readability.
       row.getCell(3).alignment = {

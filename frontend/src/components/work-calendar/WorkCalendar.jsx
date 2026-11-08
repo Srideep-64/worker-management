@@ -28,7 +28,9 @@ import {
     if (!record || record.source !== "MANUAL") return "";
 
     if (record.status === "WORKED") {
-      return String(record.hours ?? "");
+      return record.hours == null
+        ? ""
+        : Number(record.hours).toFixed(2);
     }
 
     return (
@@ -321,6 +323,15 @@ function selectDate(date) {
       : ""
   );
 }
+function handleEntryValueChange(value) {
+  // Allow A, H, W or numeric hours with up to 2 decimals.
+  const valid = /^(?:[AHWahw]?|\d{0,2}(?:\.\d{0,2})?)$/.test(value);
+
+  if (!valid) return;
+
+  setEntryValue(value);
+  setSaveError("");
+}
 
   function parseEntry() {
     const raw = entryValue.trim().toUpperCase();
@@ -335,6 +346,11 @@ function selectDate(date) {
         hours: null,
       };
     }
+    if (!/^(?:\d{1,2}(?:\.\d{1,2})?|\.\d{1,2})$/.test(raw)) {
+    throw new Error(
+      "Enter valid hours with at most 2 decimal places."
+    );
+  }
 
     const parsedHours = Number(raw);
 
@@ -718,10 +734,7 @@ async function handleRefresh() {
         byDate={byDate}
         pendingByDate={pendingByDate}
         entryValue={entryValue}
-        onEntryValueChange={(value) => {
-          setEntryValue(value);
-          setSaveError("");
-        }}
+        onEntryValueChange={handleEntryValueChange}
         canEditSelected={!selectedRecord || isEditingManual}
         entryDisabled={saving || showUploadConfirm}
         onSelectDate={selectDate}
@@ -759,10 +772,7 @@ async function handleRefresh() {
 
       <WorkMobileKeyboard
         value={entryValue}
-        onChange={(value) => {
-          setEntryValue(value);
-          setSaveError("");
-        }}
+        onChange={handleEntryValueChange}
         onSubmit={handleSubmitAndAdvance}
         disabled={
           saving ||

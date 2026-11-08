@@ -408,6 +408,24 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
   await expireStaleUploads();
 
   const periodDate = periodMonthToDate(periodMonth);
+
+  // Fast-path guard. The same check is repeated while holding the exclusive
+  // company/month lock below, so concurrent requests cannot both proceed.
+  const pendingUpload = await prisma.timesheetUpload.findFirst({
+    where: {
+      companyId,
+      periodMonth: periodDate,
+      status: "PROCESSING",
+    },
+    select: { id: true },
+  });
+
+  if (pendingUpload) {
+    throw ApiError.conflict(
+      "Another timesheet upload is pending for this company and month. Confirm or cancel it before uploading another."
+    );
+  }
+
   const context = await loadValidationContext(companyId);
   const workbook = readWorkbookOrThrow(req.file.buffer);
   const { format, errors, records } = parseAndValidateWorkbook(workbook, {
@@ -422,35 +440,46 @@ export const uploadTimesheet = asyncHandler(async (req, res) => {
     filename: req.file.originalname,
   });
 
-  const upload = await prisma.timesheetUpload.create({
-    data: {
-      companyId,
-      periodMonth: periodDate,
-      originalFilename: req.file.originalname,
-      storageKey,
-      uploadedById: req.user.id,
-      status: errors.length > 0 ? "FAILED" : "PROCESSING",
-      rowCount: records.length,
-      errorCount: errors.length,
+  // This short transaction serializes pending-upload registration for the
+  // same company/month. Keep file parsing and storage OUTSIDE the transaction.
+  const upload = await prisma.$transaction(
+    async (tx) => {
+      await lockCompanyMonth(tx, companyId, periodMonth, "exclusive");
+
+      const pending = await tx.timesheetUpload.findFirst({
+        where: {
+          companyId,
+          periodMonth: periodDate,
+          status: "PROCESSING",
+        },
+        select: { id: true },
+      });
+
+      if (pending) {
+        throw ApiError.conflict(
+          "Another timesheet upload is pending for this company and month. Confirm or cancel it before uploading another."
+        );
+      }
+
+      return tx.timesheetUpload.create({
+        data: {
+          companyId,
+          periodMonth: periodDate,
+          originalFilename: req.file.originalname,
+          storageKey,
+          uploadedById: req.user.id,
+          status: errors.length > 0 ? "FAILED" : "PROCESSING",
+          rowCount: records.length,
+          errorCount: errors.length,
+        },
+      });
     },
-  });
+    { maxWait: 10000, timeout: 20000 },
+  );
 
   if (errors.length > 0) {
     return res.status(422).json({ upload, valid: false, format, errors });
   }
-
-  // A new preview replaces this user's earlier unconfirmed preview for the
-  // same company and month.
-  await prisma.timesheetUpload.updateMany({
-    where: {
-      companyId,
-      periodMonth: periodDate,
-      uploadedById: req.user.id,
-      status: "PROCESSING",
-      NOT: { id: upload.id },
-    },
-    data: { status: "CANCELLED" },
-  });
 
   const { existingActive, overlap, changes } = await analyzeUpload({
     records,

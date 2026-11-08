@@ -3,7 +3,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { calculatePayroll, money } from "../utils/payroll.js";
 import {
   monthRange,
-  monthStartDate,
   currentMonthString,
   dateOnly,
   dateKeyToUtcDate,
@@ -13,7 +12,6 @@ import {
   assertWorkDateNotInFuture,
   assertWorkDateWithinEmployment,
   validateWorkStatus,
-  assertNoActiveTimesheet,
   serializeRecord,
   summarize,
 } from "../utils/workRecord.js";
@@ -81,7 +79,6 @@ export class WorkService {
       );
     }
 
-    const monthStart = monthStartDate(month);
     const workDates = normalizedRecords.map((item) => item.workDate);
 
     const {
@@ -91,7 +88,7 @@ export class WorkService {
       records: savedRecords,
     } = await prisma.$transaction(
       async (tx) => {
-        // 2. Validate worker and active timesheet.
+        // 2. Validate worker, then coordinate writes with timesheet confirmation.
         const worker = await tx.worker.findUnique({
           where: { id: workerId },
           select: {
@@ -108,14 +105,11 @@ export class WorkService {
           throw ApiError.notFound("Worker not found.");
         }
 
+        // A confirmed timesheet does not block unrelated manual entries.
+        // The shared company/month lock coordinates with the exclusive lock
+        // used by timesheet confirmation. Record-level checks below protect
+        // already-imported worker/date combinations.
         await lockCompanyMonth(tx, worker.companyId, month, "shared");
-
-        await assertNoActiveTimesheet(
-          worker.companyId,
-          monthStart,
-          "uploaded",
-          tx,
-        );
 
         // 3. Fetch existing records without loading unnecessary relations.
         const existingRecords = await tx.workRecord.findMany({
@@ -145,6 +139,21 @@ export class WorkService {
           assertWorkDateWithinEmployment(worker, workDate);
           assertWorkDateNotInFuture(workDate);
           validateWorkStatus({ status, hours });
+          // Reject API submissions beyond 2 decimal places; the database
+          // stores WorkRecord.hours as Decimal(4, 2).
+          if (status === "WORKED") {
+            const value = Number(hours);
+            const hundredths = value * 100;
+
+            if (
+              !Number.isFinite(value) ||
+              Math.abs(hundredths - Math.round(hundredths)) > 1e-8
+            ) {
+              throw ApiError.badRequest(
+                "Worked hours must have at most 2 decimal places."
+              );
+            }
+          }
 
           const existing = existingByDate.get(dateKey);
 

@@ -65,44 +65,45 @@ function isBlankRow(row) {
 
 
 function parseDayCellValue(raw) {
-  if (raw === undefined || raw === null || raw === "") {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
     return { kind: "blank" };
   }
 
-  if (typeof raw === "number") {
-    if (raw < 0 || raw > 24) {
-      return {
-        kind: "error",
-        message: `Hours ${raw} is out of the 0–24 range`,
-      };
-    }
+  const input = String(raw).trim().toUpperCase();
 
-    return { kind: "hours", value: raw };
+  if (Object.hasOwn(SHORTHAND_STATUS, input)) {
+    return { kind: "status", value: SHORTHAND_STATUS[input] };
   }
 
-  const s = String(raw).trim().toUpperCase();
-
-  if (s in SHORTHAND_STATUS) {
-    return { kind: "status", value: SHORTHAND_STATUS[s] };
+  // Excel numeric cells can contain more precision than their displayed
+  // number format suggests; validate the underlying value, not its display.
+  // Text cells must also use ordinary decimal notation (no exponent syntax).
+  if (typeof raw !== "number" && !/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(input)) {
+    return {
+      kind: "error",
+      message: `"${raw}" is not recognized — expected hours (up to 2 decimals), or A/H/W`,
+    };
   }
 
-  const asNumber = Number(s);
+  const hours = Number(raw);
 
-  if (s !== "" && !Number.isNaN(asNumber)) {
-    if (asNumber <= 0 || asNumber > 24) {
-      return {
-        kind: "error",
-        message: `Hours ${asNumber} is out of the 0–24 range`,
-      };
-    }
-
-    return { kind: "hours", value: asNumber };
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) {
+    return {
+      kind: "error",
+      message: `Hours ${raw} must be greater than 0 and at most 24`,
+    };
   }
 
-  return {
-    kind: "error",
-    message: `"${raw}" is not recognized — expected a number of hours (0–24), or A/H/W`,
-  };
+  const hundredths = hours * 100;
+  if (Math.abs(hundredths - Math.round(hundredths)) > 1e-8) {
+    return {
+      kind: "error",
+      message: `Hours ${raw} has more than 2 decimal places; use values such as 11.25 or 11.75`,
+    };
+  }
+
+  // Remove harmless floating-point noise only after precision validation.
+  return { kind: "hours", value: Math.round(hundredths) / 100 };
 }
 
 /**
