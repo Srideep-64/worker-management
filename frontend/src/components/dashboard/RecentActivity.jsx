@@ -42,7 +42,7 @@ function logLink(group) {
   })}`;
 }
 
-// Four entries are visible at once; additional entries scroll inside the card.
+// Four rows visible at once: four activities on small screens, eight on large screens.
 const ACTIVITY_ROW_HEIGHT = 112;
 const VISIBLE_ROWS = 4;
 
@@ -89,7 +89,7 @@ export default function RecentActivity({ refreshKey = 0 }) {
 
       {groups.length > 0 && (
         <div
-          className="divide-y divide-border overflow-y-auto overscroll-contain pr-2"
+          className="grid grid-cols-1 gap-x-4 overflow-y-auto overscroll-contain pr-2 lg:grid-cols-2"
           style={{ maxHeight: ACTIVITY_ROW_HEIGHT * VISIBLE_ROWS }}
           role="list"
           aria-label="Recent activity entries"
@@ -105,7 +105,7 @@ export default function RecentActivity({ refreshKey = 0 }) {
                 key={group.key}
                 to={logLink(group)}
                 role="listitem"
-                className="group flex min-w-0 gap-3 overflow-hidden py-3 transition-colors hover:bg-accent-soft/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                className="group flex min-w-0 gap-3 overflow-hidden border-b border-border py-3 transition-colors hover:bg-accent-soft/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent lg:odd:border-r lg:odd:pr-4"
                 style={{ height: ACTIVITY_ROW_HEIGHT }}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/60 text-accent">

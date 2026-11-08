@@ -22,7 +22,7 @@ import EmptyState from "../components/ui/EmptyState.jsx";
 import RecentActivity from "../components/dashboard/RecentActivity.jsx";
 
 import { api, invalidate } from "../api/client.js";
-import { useFetch } from "../hooks.js";
+import { useApiQuery } from "../hooks/useApiQuery.js";
 
 // Use UAE time, not the computer's time zone. Also handles January -> December.
 function getPreviousUaeMonth() {
@@ -85,9 +85,8 @@ export default function Dashboard() {
   const [month, setMonth] = useState(getPreviousUaeMonth);
   const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
-  const { data, error, loading, reload } = useFetch(
-    () => api.get(`/dashboard?month=${encodeURIComponent(month)}`),
-    [month],
+  const { data, error, loading, reload } = useApiQuery(
+    `/dashboard?month=${encodeURIComponent(month)}`
   );
 
   const companies = data?.companies ?? [];
@@ -98,7 +97,7 @@ export default function Dashboard() {
 
     setRefreshing(true);
 
-    invalidate("/dashboard", "/logs/summary");
+    invalidate("/logs/summary");
 
     try {
       await reload();

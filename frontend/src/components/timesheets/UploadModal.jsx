@@ -136,7 +136,7 @@ export default function UploadModal({ companies, onClose, onDone }) {
 
     try {
       const response = await api.post("/timesheets/upload", formData);
-      invalidate("/timesheets", "/companies", "/workers", "/dashboard");
+      invalidate("/timesheets");
       setResult(response);
       setSupersedeTimesheet(false);
       setStep("preview");

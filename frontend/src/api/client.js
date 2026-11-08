@@ -1,23 +1,11 @@
-
-/**
- * Thin wrapper around fetch for talking to the Express API.
- *
- * Authentication:
- * - Backend sets a secure, httpOnly cookie on login.
- * - Frontend never stores or accesses authentication tokens.
- * - Every request includes credentials: "include".
- *
- * Development:
- * - Vite proxies /api to the backend.
- * - API paths remain relative across environments.
- */
-
+/** Authenticated API client with bounded, per-resource in-memory caching. */
 const BASE_URL = "/api";
-
-// Share identical GET requests while they are in flight.
+const cache = new Map();
 const inFlightGets = new Map();
+const generations = new Map();
+const MAX_ENTRIES = 250;
+let sessionEpoch = 0;
 
-// Custom API error
 export class ApiError extends Error {
   constructor(message, status, details) {
     super(message);
@@ -27,180 +15,142 @@ export class ApiError extends Error {
   }
 }
 
-// Build query strings from an object
 export function qs(params = {}) {
-  const searchParams = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (
-      value !== undefined &&
-      value !== null &&
-      String(value).trim() !== ""
-    ) {
-      searchParams.set(key, String(value).trim());
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      query.set(key, String(value).trim());
     }
-  });
-
-  const query = searchParams.toString();
-
-  return query ? `?${query}` : "";
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
 }
 
-// ── Response cache ─────────────────────────────────────────────
-const cache = new Map(); // path -> { data, expires }
-let version = 0;         // bumped on every invalidate
-
-// First matching rule wins; anything unmatched uses DEFAULT_TTL.
-
 const TTL_RULES = [
-  // Authentication and session information
-  [/^\/(me|auth)(\/|\?|$)/, 0],
-
-  // All logs endpoints should always fetch fresh data
-  [/^\/logs(\/|\?|$)/, 0],
-
-  // Roles rarely change
-  [/^\/roles(\/|\?|$)/, Infinity],
-
-  // Dashboard, work records, payroll and stats
-  [/(^|\/)(work|payroll|stats|dashboard)(\/|\?|$)/, 60_000],
+  [/^\/(?:me|auth)(?:\/|\?|$)/, 0],
+  [/^\/logs\/summary(?:\?|$)/, 120_000],
+  [/^\/logs\/users(?:\?|$)/, Infinity],
+  [/^\/logs(?:\/|\?|$)/, 0],
+  [/^\/roles(?:\/|\?|$)/, Infinity],
+  [/^\/dashboard(?:\/|\?|$)/, 60_000],
+  [/^\/workers\/[^/?]+\/(?:work|payroll)(?:\/|\?|$)/, 60_000],
+  [/^\/companies\/[^/?]+\/stats(?:\/|\?|$)/, 60_000],
 ];
+const DEFAULT_TTL = 120_000;
+const ttlFor = (path) => TTL_RULES.find(([rule]) => rule.test(path))?.[1] ?? DEFAULT_TTL;
+const currentGeneration = (path) => generations.get(path) ?? 0;
 
-const DEFAULT_TTL = 120_000;                       // 2 min
-const ttlFor = (path) =>
-  TTL_RULES.find(([re]) => re.test(path))?.[1] ?? DEFAULT_TTL;
+// A bounded cache; entries are session-only and never stored in localStorage.
+function putCache(path, data) {
+  const ttl = ttlFor(path);
+  if (ttl === 0) return;
+  cache.delete(path);
+  cache.set(path, { data, expires: ttl === Infinity ? Infinity : Date.now() + ttl });
+  while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value);
+}
+
+// Returns stale data too, for instant initial rendering while revalidating.
+export function peekCache(path) {
+  const entry = cache.get(path);
+  return entry ? { data: entry.data, fresh: entry.expires > Date.now() } : null;
+}
+
+async function request(path, { method = "GET", body, headers, ...rest } = {}) {
+  const normalizedMethod = method.toUpperCase();
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const isGet = normalizedMethod === "GET";
+  const canDedupe = isGet && body == null && !headers && Object.keys(rest).length === 0;
+  const url = `${BASE_URL}${path}`;
+  const generation = currentGeneration(path);
+  const epoch = sessionEpoch;
+  const existing = inFlightGets.get(url);
+  if (canDedupe && existing && existing.generation === generation && existing.epoch === epoch) {
+    return existing.promise;
+  }
+
+  const promise = (async () => {
+    const response = await fetch(url, {
+      method: normalizedMethod,
+      credentials: "include",
+      headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...headers },
+      body: body == null ? undefined : isFormData ? body : JSON.stringify(body),
+      ...rest,
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : null;
+    // A pre-logout/pre-login response must never populate the new user's UI.
+    if (isGet && epoch !== sessionEpoch) {
+      throw new ApiError("Session changed. Please retry.", 0);
+    }
+    if (!response.ok) {
+      throw new ApiError(
+        payload?.error?.message || payload?.message || `Request failed with status ${response.status}`,
+        response.status,
+        payload?.error?.details || payload?.errors,
+      );
+    }
+    return payload;
+  })();
+
+  if (canDedupe) {
+    inFlightGets.set(url, { promise, generation, epoch });
+    try { return await promise; }
+    finally {
+      if (inFlightGets.get(url)?.promise === promise) inFlightGets.delete(url);
+    }
+  }
+  return promise;
+}
 
 async function cachedGet(path, { force = false } = {}) {
   const hit = cache.get(path);
   if (!force && hit && hit.expires > Date.now()) return hit.data;
-
-  const startVersion = version;
+  const generation = currentGeneration(path);
+  const epoch = sessionEpoch;
   const data = await request(path);
-
-  // Skip the write if an invalidate ran while this request was in flight.
-  if (startVersion === version) {
-    cache.set(path, { data, expires: Date.now() + ttlFor(path) });
-  }
+  if (generation === currentGeneration(path) && epoch === sessionEpoch) putCache(path, data);
   return data;
 }
 
+/** Invalidate URL fragments, without affecting unrelated concurrent GETs. */
 export function invalidate(...parts) {
-  version++;
-  // Also drop matching in-flight GETs, otherwise a fetch started right
-  // after invalidate would join the old (stale) request.
-  for (const map of [cache, inFlightGets])
-    for (const key of map.keys())
-      if (parts.some((p) => key.includes(p))) map.delete(key);
+  const fragments = parts.filter((part) => typeof part === "string" && part.length);
+  if (!fragments.length) return;
+  const matching = (key) => fragments.some((part) => key.includes(part));
+  const paths = new Set([
+    ...cache.keys(),
+    ...[...inFlightGets.keys()].map((url) => url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url),
+  ]);
+  for (const path of paths) {
+    if (!matching(path)) continue;
+    generations.set(path, currentGeneration(path) + 1);
+    cache.delete(path);
+    inFlightGets.delete(`${BASE_URL}${path}`);
+  }
 }
 
-export function clearCache() {   // call on logout
-  version++;
+export function clearCache() {
+  sessionEpoch++;
   cache.clear();
   inFlightGets.clear();
+  generations.clear();
 }
 
-// Centralized fetch handler
-async function request(
-  path,
-  { method = "GET", body, headers, ...rest } = {}
-) {
-  const isFormData = body instanceof FormData;
-  const url = `${BASE_URL}${path}`;
-  const normalizedMethod = method.toUpperCase();
-
-  // Deduplicate only GET requests without custom options that could
-  // change the response. Other methods always execute independently.
-  const canDeduplicate =
-    normalizedMethod === "GET" &&
-    !body &&
-    !headers &&
-    Object.keys(rest).length === 0;
-
-  if (canDeduplicate && inFlightGets.has(url)) {
-    return inFlightGets.get(url);
-  }
-
-  const fetchPromise = (async () => {
-    const response = await fetch(url, {
-      method: normalizedMethod,
-      credentials: "include",
-
-      headers: {
-        ...(isFormData
-          ? {}
-          : { "Content-Type": "application/json" }),
-        ...headers,
-      },
-
-      body: body
-        ? isFormData
-          ? body
-          : JSON.stringify(body)
-        : undefined,
-
-      ...rest,
-    });
-
-    const contentType =
-      response.headers.get("content-type") || "";
-
-    const payload = contentType.includes("application/json")
-      ? await response.json().catch(() => null)
-      : null;
-
-    if (!response.ok) {
-  throw new ApiError(
-    payload?.error?.message ||
-      payload?.message ||
-      `Request failed with status ${response.status}`,
-    response.status,
-    payload?.error?.details || payload?.errors
-  );
+async function mutation(method, path, body) {
+  const result = await request(path, { method, body });
+  // Every successful state-changing action may generate a new audit log.
+  // Never invalidate other resource caches automatically: call sites know their dependencies.
+  if (!path.startsWith("/auth/")) invalidate("/logs/summary", "/logs?");
+  return result;
 }
 
-    return payload;
-  })();
-
-  if (canDeduplicate) {
-    inFlightGets.set(url, fetchPromise);
-
-    try {
-      return await fetchPromise;
-    } finally {
-      // Do not remove a newer request accidentally.
-      if (inFlightGets.get(url) === fetchPromise) {
-        inFlightGets.delete(url);
-      }
-    }
-  }
-
-  return fetchPromise;
-}
-
-// API methods
 export const api = {
   get: cachedGet,
-
-  post: (path, body) =>
-    request(path, {
-      method: "POST",
-      body,
-    }),
-
-  put: (path, body) =>
-    request(path, {
-      method: "PUT",
-      body,
-    }),
-
-  patch: (path, body) =>
-    request(path, {
-      method: "PATCH",
-      body,
-    }),
-
-  delete: (path) =>
-    request(path, {
-      method: "DELETE",
-    }),
+  peek: peekCache,
+  post: (path, body) => mutation("POST", path, body),
+  put: (path, body) => mutation("PUT", path, body),
+  patch: (path, body) => mutation("PATCH", path, body),
+  delete: (path) => mutation("DELETE", path),
 };

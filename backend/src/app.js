@@ -8,21 +8,7 @@ import routes from "./routes/index.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
-app.use((req, res, next) => {
-  console.log("[REQUEST START]", req.method, req.originalUrl);
 
-  res.on("finish", () => {
-    console.log("[REQUEST FINISH]", res.statusCode);
-  });
-
-  res.on("close", () => {
-    if (!res.writableEnded) {
-      console.log("[REQUEST CLOSED BEFORE FINISH]");
-    }
-  });
-
-  next();
-});
 // Behind a reverse proxy (nginx, a load balancer) in production, needed for
 app.set("trust proxy", 1);
 

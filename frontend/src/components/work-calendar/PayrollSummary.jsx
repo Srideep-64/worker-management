@@ -81,7 +81,7 @@ export default function PayrollSummary({
   }, [payroll]);
 
   function invalidateAfterWrite() {
-    invalidate(workerId, companyId, "/dashboard");
+    invalidate(`/workers/${workerId}/payroll`, `/workers/${workerId}/advances`, `/companies/${companyId}/stats`, "/dashboard");
   }
 
   async function saveHourlyRate(event) {
