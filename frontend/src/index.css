@@ -128,3 +128,35 @@
     @apply underline;
   }
 }
+
+/* Recent Activity — minimal scrollbar */
+.recent-activity-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+.recent-activity-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.recent-activity-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.recent-activity-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+}
+
+.recent-activity-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Dark mode */
+.dark .recent-activity-scroll {
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.dark .recent-activity-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+}

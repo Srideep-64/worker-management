@@ -89,7 +89,7 @@ export default function RecentActivity({ refreshKey = 0 }) {
 
       {groups.length > 0 && (
         <div
-          className="grid grid-cols-1 gap-x-4 overflow-y-auto overscroll-contain pr-2 lg:grid-cols-2"
+          className="recent-activity-scroll grid grid-cols-1 gap-x-4 overflow-y-auto overscroll-y-auto pr-2 lg:grid-cols-2"
           style={{ maxHeight: ACTIVITY_ROW_HEIGHT * VISIBLE_ROWS }}
           role="list"
           aria-label="Recent activity entries"

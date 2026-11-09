@@ -57,7 +57,7 @@ export default function Login({ modal = false, onClose }) {
         <div className="mb-4">
           <label htmlFor="email" className="label">Email</label>
           <input id="email" type="email" autoComplete="username" required autoFocus={modal}
-            className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@workforce.com" />
+            className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@workforce.ae" />
         </div>
         <div className="mb-5">
           <label htmlFor="password" className="label">Password</label>

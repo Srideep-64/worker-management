@@ -73,10 +73,12 @@ export default function WorkCalendarGrid({
         const editable = isSelected && canEditSelected;
 
         const displayValue = record
-          ? record.status === "WORKED"
-            ? record.hours ?? "—"
-            : SHORT[record.status] ?? "—"
-          : "";
+        ? record.status === "WORKED"
+          ? record.hours == null
+            ? "—"
+            : Number(record.hours).toFixed(2)
+          : SHORT[record.status] ?? "—"
+        : "";
 
         return (
           <div
